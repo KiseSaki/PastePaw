@@ -2,6 +2,50 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.3.9
+
+### Added
+- Multi-criteria clipboard sorting: support sorting by newest first, oldest first, application source, content type, and character length
+- Direct number key paste: quickly paste first 9 clips using number keys `1`~`9` or `Ctrl+1`~`Ctrl+9` with card shortcut badges
+- Plain-text clean paste: strip rich format/HTML with shortcut `Shift + Enter` or context menu
+- Pin / favorite clips: pin clips to stay on top with `P` shortcut, hover button, and amber indicator badge
+- Smart content detection: visual color swatches & HEX copy, URL detection & open link, and JSON formatter
+- Clipboard storage management: customize history capacity limit (`max_items`) and retention period (`auto_delete_days`, default forever)
+
+### Fixed
+- Fixed context menu appearing in English when app language is set to Chinese
+- Fixed smooth hide animation when auto-hiding window upon clicking outside (blur)
+
+### 新增
+- 剪贴板多维度排序：支持按最新复制、最早复制、应用来源、内容类型及字符长度排序
+- 数字键直接粘贴：前 9 项显示 `1`~`9` 快捷徽标，支持按 `1`~`9` 或 `Ctrl+1`~`Ctrl+9` 直接粘贴
+- 纯文本清洁粘贴：支持 `Shift + Enter` 快捷键或右键菜单直接粘贴无格式纯文本
+- 剪贴项置顶/收藏：支持按 `P` 或悬浮按钮置顶剪贴项，置顶项始终固定在列表首位
+- 智能内容识别与预览：支持色值识别与色块预览/复制、链接识别与浏览器打开、JSON 结构化预览与格式化
+- 剪贴板容量与保存周期设置：支持自定义最大历史条数及保留天数（默认永久）
+
+### 修复
+- 修复中文模式下右键剪贴项菜单显示为英文的问题
+- 修复点击悬浮窗外部自动隐藏时的平滑过渡隐藏动画
+
+## v1.3.8
+
+### Improved
+- Selection behavior: opening window now defaults selection to the newest clipboard item and resets scroll to 0, ensuring newly copied clips are immediately accessible
+- Top on paste: pasting any clip now moves it to the top of the history list (Paste-app style)
+
+### Fixed
+- Fixed auto-paste on Windows 11 by switching simulated keystrokes to standard `Ctrl + V` (`VK_CONTROL` + `VKEY(0x56)`) instead of `Shift + Insert`
+- Fixed floating window auto-hide when clicking outside (blur), including settings window visibility check and foreground focus activation
+
+### 优化
+- 选择逻辑优化：重新打开窗口默认聚焦最新的剪贴项并重置滚动位置，确保新复制内容即时可见
+- 粘贴置顶：粘贴任意历史剪贴项后自动将其置顶（类 Paste 体验）
+
+### 修复
+- 修复 Windows 11 系统下双击粘贴失效问题，改用通用 `Ctrl + V` 模拟输入
+- 修复点击悬浮窗外部自动隐藏失效问题，并完善设置窗口状态判断与前台焦点激活
+
 ## v1.3.7
 
 ### Added
