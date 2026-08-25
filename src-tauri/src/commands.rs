@@ -1527,6 +1527,15 @@ pub async fn open_notepad_window(app: AppHandle, note_id: Option<String>) -> Res
         return Ok(());
     }
 
+    let is_always_on_top = if let Some(db) = app.try_state::<Arc<Database>>() {
+        db.get_setting("notepad_always_on_top")
+            .await
+            .map(|v| v == "true")
+            .unwrap_or(true)
+    } else {
+        true
+    };
+
     let win_builder =
         tauri::WebviewWindowBuilder::new(&app, "notepad", tauri::WebviewUrl::App(url_query.into()))
             .title("PastePaw Notepad")
@@ -1535,7 +1544,7 @@ pub async fn open_notepad_window(app: AppHandle, note_id: Option<String>) -> Res
             .resizable(true)
             .decorations(false)
             .transparent(true)
-            .always_on_top(true);
+            .always_on_top(is_always_on_top);
 
     win_builder.build().map_err(|e| e.to_string())?;
 
@@ -1544,9 +1553,13 @@ pub async fn open_notepad_window(app: AppHandle, note_id: Option<String>) -> Res
 
 #[tauri::command]
 pub async fn set_notepad_always_on_top(
+    app: AppHandle,
     enabled: bool,
     db: tauri::State<'_, Arc<Database>>,
 ) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("notepad") {
+        let _ = win.set_always_on_top(enabled);
+    }
     db.set_setting("notepad_always_on_top", if enabled { "true" } else { "false" })
         .await
         .map_err(|e| e.to_string())?;
