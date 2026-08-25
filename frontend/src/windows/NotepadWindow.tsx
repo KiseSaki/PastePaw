@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useEditor, EditorContent } from '@tiptap/react';
+import { wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -44,6 +45,22 @@ import {
   ensureHtmlContent,
   extractPlainTextPreview,
 } from '../utils/notepadMarkdown';
+
+// Extend TaskItem to support typing [] + space or [ ] + space directly without leading '-'
+const CustomTaskItem = TaskItem.extend({
+  addInputRules() {
+    return [
+      ...(this.parent?.() || []),
+      wrappingInputRule({
+        find: /^\s*\[([ xX]?)\]\s$/,
+        type: this.type,
+        getAttributes: (match) => ({
+          checked: match[1].toLowerCase() === 'x',
+        }),
+      }),
+    ];
+  },
+});
 
 export function NotepadWindow() {
   const { t } = useTranslation();
@@ -130,11 +147,11 @@ export function NotepadWindow() {
         },
       }),
       TaskList,
-      TaskItem.configure({
+      CustomTaskItem.configure({
         nested: true,
       }),
       Placeholder.configure({
-        placeholder: '输入便签内容，支持 Markdown (如 - 列表, [] 待办, **加粗**)...',
+        placeholder: '输入便签内容，支持 Markdown (如 - 列表, 1. 列表, [] 待办, **加粗**)...',
       }),
       Link.configure({
         openOnClick: false,
@@ -142,6 +159,11 @@ export function NotepadWindow() {
         defaultProtocol: 'https',
       }),
     ],
+    editorProps: {
+      attributes: {
+        class: 'tiptap ProseMirror focus:outline-none min-h-[140px]',
+      },
+    },
     content: ensureHtmlContent(content),
     onUpdate: ({ editor: currentEditor }) => {
       const html = currentEditor.getHTML();
