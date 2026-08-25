@@ -2,6 +2,31 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.1
+
+### Added
+- Tiptap WYSIWYG Markdown Note Editor: full support for task lists (interactive clickable checkboxes), bullet lists, numbered lists, bold, strikethrough, inline code, headings (`# `, `## `), links, and horizontal dividers (`---`)
+- Floating Bubble Menu: context-sensitive format bar pops up upon text selection for quick styling
+- Draggable & Responsive Sidebar: drag resize divider with standard, compact, mini, and auto-collapse responsive modes
+- Auto-launch Pinned Notes: automatically opens the notepad window on startup if there are pinned notes or if notepad window was pinned
+- Clean Markdown Export: copying all note content or pasting to external applications automatically formats into clean standard Markdown/plaintext
+
+### Fixed
+- Fixed opacity dropdown popover z-index layering issue
+- Fixed footer status bar and action buttons wrapping on narrow windows
+
+### 新增
+- Tiptap 所见即所得 Markdown 便签编辑器：全面支持待办任务清单（可鼠标直接点击打勾）、无序圆点列表、有序数字列表、粗体、中划线、行内代码、多级标题（`#` / `##`）、链接与水平分隔线（`---`）
+- 浮动格式菜单（Bubble Menu）：选中文本时光标上方自动弹出快捷格式化气泡栏
+- 侧边栏拖拽调宽与多级自适应：按住分割线自由调节宽度，支持标准、精简、Mini 图标与自动吸附折叠形态
+- 置顶便签开机自启拉起：启动时若存在置顶便签或窗口置顶状态，自动呼出便签窗口
+- 干净标准 Markdown 导出：点击复制全文或一键粘贴至应用时，后台自动智能无损转换为标准 Markdown/纯文本
+- 快捷格式工具栏：便签顶部新增加粗、划线、待办、列表与代码快捷按钮
+
+### 修复
+- 修复便签窗口透明度调节浮层被工具栏元素遮挡的层级问题
+- 修复便签在窄窗口或侧边栏拉宽时底部操作栏按钮折行换行的问题
+
 ## v1.4.0
 
 ### Added
