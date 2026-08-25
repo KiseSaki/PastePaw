@@ -510,12 +510,11 @@ pub async fn paste_clip(
 
             // Manually perform the LRU bump (update created_at to now with subsecond precision)
             let now = chrono::Utc::now();
-            let _ =
-                sqlx::query(r#"UPDATE clips SET created_at = ? WHERE uuid = ?"#)
-                    .bind(now)
-                    .bind(&uuid)
-                    .execute(pool)
-                    .await;
+            let _ = sqlx::query(r#"UPDATE clips SET created_at = ? WHERE uuid = ?"#)
+                .bind(now)
+                .bind(&uuid)
+                .execute(pool)
+                .await;
 
             // Restart monitor
             let app_clone = app.clone();
@@ -625,7 +624,10 @@ pub async fn paste_plain_text(
                 log::error!("Failed to stop listener: {}", e);
             }
 
-            let text_content = if clip.clip_type == "text" || clip.clip_type == "html" || clip.clip_type == "rtf" {
+            let text_content = if clip.clip_type == "text"
+                || clip.clip_type == "html"
+                || clip.clip_type == "rtf"
+            {
                 let raw = String::from_utf8_lossy(&clip.content).to_string();
                 raw.trim().to_string()
             } else {
@@ -1083,7 +1085,9 @@ pub async fn register_global_shortcut(
         .global_shortcut()
         .on_shortcut(shortcut, move |_app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
-                if win_clone.is_visible().unwrap_or(false) && win_clone.is_focused().unwrap_or(false) {
+                if win_clone.is_visible().unwrap_or(false)
+                    && win_clone.is_focused().unwrap_or(false)
+                {
                     crate::animate_window_hide(&win_clone, None);
                 } else {
                     crate::position_window_at_bottom(&win_clone);
@@ -1159,4 +1163,3 @@ pub fn get_layout_config() -> serde_json::Value {
         "window_height": crate::constants::WINDOW_HEIGHT,
     })
 }
-

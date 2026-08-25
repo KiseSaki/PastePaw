@@ -156,8 +156,17 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
     invoke<string[]>('get_ignored_apps').then(setIgnoredApps).catch(console.error);
     getVersion().then(setAppVersion).catch(console.error);
     loadFolders();
-
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isRecordingMode && !confirmDialog.isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRecordingMode, confirmDialog.isOpen, onClose]);
 
   const handleAddIgnoredApp = async () => {
     if (!newIgnoredApp.trim()) return;

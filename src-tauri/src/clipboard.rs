@@ -34,7 +34,7 @@ use windows::Win32::System::ProcessStatus::{GetModuleBaseNameW, GetModuleFileNam
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL, VIRTUAL_KEY,
+    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Shell::{
@@ -126,7 +126,6 @@ struct ClipboardImageRead {
     decode_ms: u128,
     source_type: &'static str,
 }
-
 
 fn read_clipboard_image_with_clipboard_rs(
     source_type: &'static str,
@@ -463,7 +462,8 @@ async fn process_clipboard_change(
         let auto_delete_days = s.auto_delete_days;
         let pool = pool.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = crate::commands::enforce_clipboard_limits(&pool, max_items, auto_delete_days).await;
+            let _ =
+                crate::commands::enforce_clipboard_limits(&pool, max_items, auto_delete_days).await;
         });
     }
 
@@ -891,4 +891,3 @@ pub fn send_paste_input() {
         log::info!("send_paste_input: SendInput returned {}", result);
     }
 }
-

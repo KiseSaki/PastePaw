@@ -49,7 +49,7 @@ Both places must have identical toggle logic. Issue #6 was caused by `register_g
 During `animate_window_hide`, the window starts as `HWND_TOPMOST`, then when it reaches the taskbar's top Y coordinate it drops behind the taskbar (`SetWindowPos` with `taskbar_hwnd` as insert-after), then `window.hide()` at the end. This makes it slide behind the taskbar naturally.
 
 ### Blur → Auto-hide
-`on_window_event` → `Focused(false)` → skips if: settings window is open, `LAST_SHOW_TIME` debounce < 500ms, `IS_ANIMATING` is true, or window is already hidden. If cursor moved to a different monitor, repositions there instead of hiding.
+`on_window_event` → `Focused(false)` → auto-hides `main` window (skips if: `LAST_SHOW_TIME` debounce < 200ms, `IS_ANIMATING` is true, or window is already hidden). Opening the settings window also automatically hides the main window.
 
 ### Settings
 `SettingsManager` is managed state (`app.manage(Arc::new(settings_manager))`). Access via `window.state::<Arc<SettingsManager>>().get()`. Persisted to DB. Settings changes that affect hotkey require calling `commands::register_global_shortcut` which unregisters the old shortcut and re-registers with the toggle logic.

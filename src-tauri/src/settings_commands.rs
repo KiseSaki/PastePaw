@@ -91,7 +91,8 @@ pub async fn save_settings(app: AppHandle, settings: serde_json::Value) -> Resul
     if let Some(db) = app.try_state::<Arc<crate::database::Database>>() {
         let pool = db.pool.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = crate::commands::enforce_clipboard_limits(&pool, max_items, auto_delete_days).await;
+            let _ =
+                crate::commands::enforce_clipboard_limits(&pool, max_items, auto_delete_days).await;
         });
     }
 

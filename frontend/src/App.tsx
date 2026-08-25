@@ -128,6 +128,7 @@ function App() {
         await existingWin.show();
         await existingWin.setFocus();
       }
+      invoke('hide_window').catch(console.error);
       return;
     }
 
@@ -142,7 +143,9 @@ function App() {
       center: true,
     });
 
-    settingsWin.once('tauri://created', function () {});
+    settingsWin.once('tauri://created', function () {
+      invoke('hide_window').catch(console.error);
+    });
 
     settingsWin.once('tauri://error', function (e) {
       console.error('Error creating settings window', e);

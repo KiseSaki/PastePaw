@@ -144,13 +144,6 @@ pub fn run_app() {
                         let label = window.label();
                         // Only auto-hide the main window
                         if label == "main" {
-                            if let Some(settings_win) = window.app_handle().get_webview_window("settings") {
-                                if settings_win.is_visible().unwrap_or(false) {
-                                    // Settings window is visible, keep main window visible
-                                    return;
-                                }
-                            }
-
                             // Avoid debounce conflict with recent show (< 200ms)
                             let last_show = LAST_SHOW_TIME.load(Ordering::SeqCst);
                             let now = chrono::Local::now().timestamp_millis();
@@ -364,8 +357,16 @@ pub fn animate_window_show(window: &tauri::WebviewWindow) {
         let s = manager.get();
         let is_mica = s.mica_effect != "clear";
         let no_corners = !s.round_corners;
-        let side = if is_mica && no_corners { 0.0 } else { constants::WINDOW_MARGIN };
-        let bottom = if is_mica && no_corners { 0.0 } else { constants::WINDOW_MARGIN };
+        let side = if is_mica && no_corners {
+            0.0
+        } else {
+            constants::WINDOW_MARGIN
+        };
+        let bottom = if is_mica && no_corners {
+            0.0
+        } else {
+            constants::WINDOW_MARGIN
+        };
         (side, bottom, s.float_above_taskbar)
     };
 
@@ -434,11 +435,10 @@ pub fn animate_window_show(window: &tauri::WebviewWindow) {
 
             for i in 1..=steps {
                 let current_y = start_y as f64 + dy * i as f64;
-                let _ =
-                    window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                        x: work_area.position.x + side_margin_px,
-                        y: current_y as i32,
-                    }));
+                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                    x: work_area.position.x + side_margin_px,
+                    y: current_y as i32,
+                }));
                 std::thread::sleep(duration);
             }
 
@@ -500,8 +500,16 @@ pub fn animate_window_hide(
             let s = manager.get();
             let is_mica = s.mica_effect != "clear";
             let no_corners = !s.round_corners;
-            let side = if is_mica && no_corners { 0.0 } else { constants::WINDOW_MARGIN };
-            let bottom = if is_mica && no_corners { 0.0 } else { constants::WINDOW_MARGIN };
+            let side = if is_mica && no_corners {
+                0.0
+            } else {
+                constants::WINDOW_MARGIN
+            };
+            let bottom = if is_mica && no_corners {
+                0.0
+            } else {
+                constants::WINDOW_MARGIN
+            };
             (side, bottom, s.float_above_taskbar)
         };
 
@@ -526,24 +534,29 @@ pub fn animate_window_hide(
         }
 
         let current_pos = window.outer_position().ok();
-        let monitor = window.current_monitor().ok().flatten().or_else(|| {
-            if let Some(pos) = current_pos {
-                if let Ok(monitors) = window.available_monitors() {
-                    for m in monitors {
-                        let mpos = m.position();
-                        let msize = m.size();
-                        if pos.x >= mpos.x
-                            && pos.x < mpos.x + msize.width as i32
-                            && pos.y >= mpos.y
-                            && pos.y < mpos.y + msize.height as i32
-                        {
-                            return Some(m);
+        let monitor = window
+            .current_monitor()
+            .ok()
+            .flatten()
+            .or_else(|| {
+                if let Some(pos) = current_pos {
+                    if let Ok(monitors) = window.available_monitors() {
+                        for m in monitors {
+                            let mpos = m.position();
+                            let msize = m.size();
+                            if pos.x >= mpos.x
+                                && pos.x < mpos.x + msize.width as i32
+                                && pos.y >= mpos.y
+                                && pos.y < mpos.y + msize.height as i32
+                            {
+                                return Some(m);
+                            }
                         }
                     }
                 }
-            }
-            None
-        }).or_else(|| get_monitor_at_cursor(&window));
+                None
+            })
+            .or_else(|| get_monitor_at_cursor(&window));
 
         if let Some(monitor) = monitor {
             let scale_factor = monitor.scale_factor();
@@ -572,11 +585,10 @@ pub fn animate_window_hide(
 
             for i in 1..=steps {
                 let current_y = start_y as f64 + dy * i as f64;
-                let _ =
-                    window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                        x: work_area.position.x + side_margin_px,
-                        y: current_y as i32,
-                    }));
+                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                    x: work_area.position.x + side_margin_px,
+                    y: current_y as i32,
+                }));
                 std::thread::sleep(duration);
             }
 
@@ -624,7 +636,12 @@ pub fn get_monitor_at_cursor(window: &tauri::WebviewWindow) -> Option<tauri::Mon
     found.or_else(|| window.current_monitor().ok().flatten())
 }
 
-pub fn apply_window_effect(window: &tauri::WebviewWindow, effect: &str, theme: &tauri::Theme, round_corners: bool) {
+pub fn apply_window_effect(
+    window: &tauri::WebviewWindow,
+    effect: &str,
+    theme: &tauri::Theme,
+    round_corners: bool,
+) {
     log::info!(
         "THEME:apply_window_effect called: effect={}, theme={:?}, round_corners={}",
         effect,
@@ -669,7 +686,11 @@ pub fn apply_window_effect(window: &tauri::WebviewWindow, effect: &str, theme: &
             DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND,
         };
         let hwnd = HWND(handle.0 as _);
-        let corner_pref = if use_rounded { DWMWCP_ROUND.0 } else { DWMWCP_DONOTROUND.0 };
+        let corner_pref = if use_rounded {
+            DWMWCP_ROUND.0
+        } else {
+            DWMWCP_DONOTROUND.0
+        };
         unsafe {
             let _ = DwmSetWindowAttribute(
                 hwnd,
