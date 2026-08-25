@@ -516,10 +516,10 @@ export function NotepadWindow() {
             </button>
 
             {showOpacitySlider && (
-              <div className="bg-card/98 dark:bg-neutral-900/98 animate-in fade-in zoom-in-95 absolute right-0 top-8 z-50 flex w-44 flex-col gap-2 rounded-xl border border-border/80 p-3 shadow-2xl backdrop-blur-2xl duration-100">
-                <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+              <div className="animate-in fade-in-0 zoom-in-95 absolute right-0 top-8 z-50 flex w-48 flex-col gap-2.5 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-2xl duration-100">
+                <div className="flex items-center justify-between text-xs font-semibold text-popover-foreground">
                   <span>{t('notepad.opacity')}</span>
-                  <span className="font-mono text-amber-500">{opacity}%</span>
+                  <span className="font-mono font-bold text-amber-500">{opacity}%</span>
                 </div>
                 <input
                   type="range"
@@ -919,7 +919,7 @@ export function NotepadWindow() {
             {editor && (
               <BubbleMenu
                 editor={editor}
-                className="flex items-center gap-1 rounded-lg border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md dark:bg-neutral-900/95"
+                className="flex items-center gap-1 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl"
               >
                 <button
                   type="button"
