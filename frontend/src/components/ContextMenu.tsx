@@ -65,7 +65,7 @@ export function ContextMenu({ x, y, options, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="animate-in fade-in-0 zoom-in-95 fixed z-50 min-w-[12.5rem] max-h-[calc(100vh-16px)] overflow-y-auto no-scrollbar rounded-xl border border-border bg-popover/95 backdrop-blur-md p-1.5 shadow-2xl"
+      className="animate-in fade-in-0 zoom-in-95 no-scrollbar fixed z-50 max-h-[calc(100vh-16px)] min-w-[12.5rem] overflow-y-auto rounded-xl border border-border bg-popover/95 p-1.5 shadow-2xl backdrop-blur-md"
       style={{ top: position.top, left: position.left }}
     >
       <div className="flex flex-col gap-0.5">

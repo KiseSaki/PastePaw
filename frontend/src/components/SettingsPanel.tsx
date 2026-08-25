@@ -65,7 +65,11 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
           if (updates.hotkey) {
             await invoke('register_global_shortcut', { hotkey: updates.hotkey });
           }
-          if ('round_corners' in updates || 'mica_effect' in updates || 'float_above_taskbar' in updates) {
+          if (
+            'round_corners' in updates ||
+            'mica_effect' in updates ||
+            'float_above_taskbar' in updates
+          ) {
             await invoke('refresh_window');
           }
         } catch (error) {
@@ -432,43 +436,60 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
                     </div>
 
                     <div className="space-y-3">
-                        <label className="block">
-                          <span className="text-sm font-medium">{t('settings.windowEffect')}</span>
-                        </label>
-                        <Select
-                          value={settings.mica_effect || 'clear'}
-                          onChange={(val) => updateSetting('mica_effect', val)}
-                          options={[
-                            { value: 'mica_alt', label: 'Mica Alt' },
-                            { value: 'mica', label: 'Mica' },
-                            { value: 'clear', label: 'Clear' },
-                          ]}
-                        />
-                      </div>
+                      <label className="block">
+                        <span className="text-sm font-medium">{t('settings.windowEffect')}</span>
+                      </label>
+                      <Select
+                        value={settings.mica_effect || 'clear'}
+                        onChange={(val) => updateSetting('mica_effect', val)}
+                        options={[
+                          { value: 'mica_alt', label: 'Mica Alt' },
+                          { value: 'mica', label: 'Mica' },
+                          { value: 'clear', label: 'Clear' },
+                        ]}
+                      />
+                    </div>
 
                     <div className="flex items-center justify-between rounded-lg border border-border bg-accent/20 p-3">
                       <div>
-                        <span className="text-sm font-medium">{t('settings.floatAboveTaskbar')}</span>
-                        <p className="text-xs text-muted-foreground">{t('settings.floatAboveTaskbarDesc')}</p>
+                        <span className="text-sm font-medium">
+                          {t('settings.floatAboveTaskbar')}
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.floatAboveTaskbarDesc')}
+                        </p>
                       </div>
                       <button
-                        onClick={() => updateSetting('float_above_taskbar', !(settings.float_above_taskbar ?? true))}
+                        onClick={() =>
+                          updateSetting(
+                            'float_above_taskbar',
+                            !(settings.float_above_taskbar ?? true)
+                          )
+                        }
                         className={`h-6 w-11 rounded-full transition-colors ${(settings.float_above_taskbar ?? true) ? 'bg-primary' : 'bg-accent'}`}
                       >
-                        <span className={`block h-4 w-4 rounded-full bg-white transition-transform ${(settings.float_above_taskbar ?? true) ? 'translate-x-6' : 'translate-x-1'}`} />
+                        <span
+                          className={`block h-4 w-4 rounded-full bg-white transition-transform ${(settings.float_above_taskbar ?? true) ? 'translate-x-6' : 'translate-x-1'}`}
+                        />
                       </button>
                     </div>
 
                     <div className="flex items-center justify-between rounded-lg border border-border bg-accent/20 p-3">
                       <div>
                         <span className="text-sm font-medium">{t('settings.roundCorners')}</span>
-                        <p className="text-xs text-muted-foreground">{t('settings.roundCornersDesc')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t('settings.roundCornersDesc')}
+                        </p>
                       </div>
                       <button
-                        onClick={() => updateSetting('round_corners', !(settings.round_corners ?? false))}
+                        onClick={() =>
+                          updateSetting('round_corners', !(settings.round_corners ?? false))
+                        }
                         className={`h-6 w-11 rounded-full transition-colors ${(settings.round_corners ?? false) ? 'bg-primary' : 'bg-accent'}`}
                       >
-                        <span className={`block h-4 w-4 rounded-full bg-white transition-transform ${(settings.round_corners ?? false) ? 'translate-x-6' : 'translate-x-1'}`} />
+                        <span
+                          className={`block h-4 w-4 rounded-full bg-white transition-transform ${(settings.round_corners ?? false) ? 'translate-x-6' : 'translate-x-1'}`}
+                        />
                       </button>
                     </div>
 
@@ -541,7 +562,9 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
                       <div className="space-y-3">
                         <label className="block">
                           <span className="text-sm font-medium">{t('settings.maxItems')}</span>
-                          <p className="text-xs text-muted-foreground">{t('settings.maxItemsDesc')}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t('settings.maxItemsDesc')}
+                          </p>
                         </label>
                         <Select
                           value={String(settings.max_items ?? 1000)}
@@ -560,8 +583,12 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
 
                       <div className="space-y-3">
                         <label className="block">
-                          <span className="text-sm font-medium">{t('settings.retentionPeriod')}</span>
-                          <p className="text-xs text-muted-foreground">{t('settings.retentionPeriodDesc')}</p>
+                          <span className="text-sm font-medium">
+                            {t('settings.retentionPeriod')}
+                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            {t('settings.retentionPeriodDesc')}
+                          </p>
                         </label>
                         <Select
                           value={String(settings.auto_delete_days ?? 0)}
@@ -861,7 +888,14 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
             PastePaw {appVersion || '...'}
           </button>
           <div className="flex gap-2 text-xs text-muted-foreground">
-            <a href="https://pastepaw.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">© 2026 PastePaw</a>
+            <a
+              href="https://pastepaw.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              © 2026 PastePaw
+            </a>
             <span>•</span>
             <button onClick={handleCheckUpdate} className="underline hover:text-foreground">
               {t('settings.checkForUpdates')}

@@ -43,6 +43,7 @@
     "paste": "Paste",
     "pastePlainText": "Paste Plain Text",
     "copyPlainText": "Copy Plain Text",
+    "saveAsNote": "Save as Note",
     "pin": "Pin to Top",
     "unpin": "Unpin",
     "openUrl": "Open URL in Browser",
@@ -162,5 +163,30 @@
     "folderDeleteFailed": "Failed to delete folder",
     "folderRenameFailed": "Failed to rename folder",
     "copyFailed": "Failed to copy"
+  },
+  "notepad": {
+    "title": "Notepad",
+    "openNotepad": "Open Notepad",
+    "newNote": "New Note",
+    "searchPlaceholder": "Search notes...",
+    "noNotes": "No notes yet",
+    "noNotesDesc": "Click '+ New Note' to create your first note",
+    "titlePlaceholder": "Title (optional)",
+    "contentPlaceholder": "Type your note here...",
+    "alwaysOnTop": "Always on Top",
+    "cancelAlwaysOnTop": "Disable Always on Top",
+    "opacity": "Opacity",
+    "copyAll": "Copy All",
+    "pasteToApp": "Paste to App",
+    "pasteToAppTip": "Ctrl+Enter to paste directly to previous window",
+    "deleteNote": "Delete Note",
+    "deleteNoteConfirm": "Are you sure you want to delete this note?",
+    "noteDeleted": "Note deleted",
+    "noteCreated": "Note created",
+    "noteSaved": "Note saved",
+    "charCount": "{{chars}} chars, {{words}} words",
+    "pinned": "Pinned",
+    "unpinned": "Unpinned",
+    "sidebar": "Sidebar"
   }
 }

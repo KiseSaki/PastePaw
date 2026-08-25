@@ -112,3 +112,26 @@ pub struct FolderItem {
     pub is_system: bool,
     pub item_count: i64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Note {
+    pub id: i64,
+    pub uuid: String,
+    pub title: String,
+    pub content: String,
+    pub color: Option<String>,
+    pub is_pinned: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteItem {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub color: String,
+    pub is_pinned: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}

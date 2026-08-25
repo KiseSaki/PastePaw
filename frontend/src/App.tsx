@@ -152,6 +152,14 @@ function App() {
     });
   }, []);
 
+  const openNotepad = useCallback(async (noteId?: string) => {
+    try {
+      await invoke('open_notepad_window', { noteId: noteId || null });
+    } catch (e) {
+      console.error('Failed to open notepad window:', e);
+    }
+  }, []);
+
   const loadClips = useCallback(
     async (folderId: string | null, append: boolean = false, searchQuery: string = '') => {
       const perfId = ++loadPerfIdRef.current;
@@ -531,9 +539,7 @@ function App() {
   const handleTogglePin = async (clipId: string) => {
     try {
       const isPinned = await invoke<boolean>('toggle_pin_clip', { id: clipId });
-      setClips((prev) =>
-        prev.map((c) => (c.id === clipId ? { ...c, is_pinned: isPinned } : c))
-      );
+      setClips((prev) => prev.map((c) => (c.id === clipId ? { ...c, is_pinned: isPinned } : c)));
       toast.success(isPinned ? t('contextMenu.pin') : t('contextMenu.unpin'));
     } catch (e) {
       console.error('Failed to toggle pin:', e);
@@ -586,6 +592,7 @@ function App() {
   useKeyboard({
     onClose: () => invoke('hide_window'),
     onSearch: () => setShowSearch(true),
+    onOpenNotepad: () => openNotepad(),
     onDelete: () => handleDelete(selectedClipId),
     onPin: () => {
       const targetId = selectedClipId || (sortedClips.length > 0 ? sortedClips[0].id : null);
@@ -714,10 +721,7 @@ function App() {
         data-el="app-window"
         className={`relative h-full w-full overflow-hidden ${settings?.mica_effect === 'clear' ? 'bg-background/95' : ''}`}
       >
-        <div
-          data-el="app-frame"
-          className="flex h-full w-full flex-col font-sans text-foreground"
-        >
+        <div data-el="app-frame" className="flex h-full w-full flex-col font-sans text-foreground">
           {draggingClipId && (
             <DragPreview
               clip={clips.find((c) => c.id === draggingClipId)!}
@@ -730,100 +734,109 @@ function App() {
               x={contextMenu.x}
               y={contextMenu.y}
               onClose={handleCloseContextMenu}
-              options={
-                (() => {
-                  if (contextMenu.type === 'folder') {
-                    return [
-                      {
-                        label: t('contextMenu.rename'),
-                        onClick: () => {
-                          setFolderModalMode('rename');
-                          setEditingFolderId(contextMenu.itemId);
-                          const folder = folders.find((f) => f.id === contextMenu.itemId);
-                          setNewFolderName(folder ? folder.name : '');
-                          setShowAddFolderModal(true);
-                        },
+              options={(() => {
+                if (contextMenu.type === 'folder') {
+                  return [
+                    {
+                      label: t('contextMenu.rename'),
+                      onClick: () => {
+                        setFolderModalMode('rename');
+                        setEditingFolderId(contextMenu.itemId);
+                        const folder = folders.find((f) => f.id === contextMenu.itemId);
+                        setNewFolderName(folder ? folder.name : '');
+                        setShowAddFolderModal(true);
                       },
-                      {
-                        label: t('contextMenu.delete'),
-                        danger: true,
-                        onClick: () => handleDeleteFolder(contextMenu.itemId),
-                      },
-                    ];
+                    },
+                    {
+                      label: t('contextMenu.delete'),
+                      danger: true,
+                      onClick: () => handleDeleteFolder(contextMenu.itemId),
+                    },
+                  ];
+                }
+
+                const targetClip = clips.find((c) => c.id === contextMenu.itemId);
+                const menuOptions: { label: string; onClick: () => void; danger?: boolean }[] = [];
+
+                if (targetClip) {
+                  const text = targetClip.content.trim();
+
+                  // Smart Action: Open URL
+                  if (/^https?:\/\/[^\s]+$/i.test(text)) {
+                    menuOptions.push({
+                      label: t('contextMenu.openUrl'),
+                      onClick: () => openUrl(text),
+                    });
                   }
 
-                  const targetClip = clips.find((c) => c.id === contextMenu.itemId);
-                  const menuOptions: { label: string; onClick: () => void; danger?: boolean }[] = [];
-
-                  if (targetClip) {
-                    const text = targetClip.content.trim();
-
-                    // Smart Action: Open URL
-                    if (/^https?:\/\/[^\s]+$/i.test(text)) {
+                  // Smart Action: Format JSON
+                  if (
+                    (text.startsWith('{') && text.endsWith('}')) ||
+                    (text.startsWith('[') && text.endsWith(']'))
+                  ) {
+                    try {
+                      const parsed = JSON.parse(text);
+                      const formatted = JSON.stringify(parsed, null, 2);
                       menuOptions.push({
-                        label: t('contextMenu.openUrl'),
-                        onClick: () => openUrl(text),
-                      });
-                    }
-
-                    // Smart Action: Format JSON
-                    if (
-                      (text.startsWith('{') && text.endsWith('}')) ||
-                      (text.startsWith('[') && text.endsWith(']'))
-                    ) {
-                      try {
-                        const parsed = JSON.parse(text);
-                        const formatted = JSON.stringify(parsed, null, 2);
-                        menuOptions.push({
-                          label: t('contextMenu.formatJson'),
-                          onClick: async () => {
-                            await navigator.clipboard.writeText(formatted);
-                            toast.success(t('common.copied'));
-                          },
-                        });
-                      } catch {}
-                    }
-
-                    // Smart Action: Copy Color HEX
-                    const hexMatch = text.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/i);
-                    if (hexMatch) {
-                      menuOptions.push({
-                        label: t('contextMenu.copyColorHex'),
+                        label: t('contextMenu.formatJson'),
                         onClick: async () => {
-                          await navigator.clipboard.writeText(text);
+                          await navigator.clipboard.writeText(formatted);
                           toast.success(t('common.copied'));
                         },
                       });
-                    }
-
-                    // Pin / Unpin
-                    menuOptions.push({
-                      label: targetClip.is_pinned ? t('contextMenu.unpin') : t('contextMenu.pin'),
-                      onClick: () => handleTogglePin(targetClip.id),
-                    });
-
-                    // Plain text actions
-                    if (targetClip.clip_type !== 'image') {
-                      menuOptions.push({
-                        label: t('contextMenu.pastePlainText'),
-                        onClick: () => handlePastePlainText(targetClip.id),
-                      });
-                      menuOptions.push({
-                        label: t('contextMenu.copyPlainText'),
-                        onClick: () => handleCopyPlainText(targetClip),
-                      });
-                    }
+                    } catch {}
                   }
 
+                  // Smart Action: Copy Color HEX
+                  const hexMatch = text.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/i);
+                  if (hexMatch) {
+                    menuOptions.push({
+                      label: t('contextMenu.copyColorHex'),
+                      onClick: async () => {
+                        await navigator.clipboard.writeText(text);
+                        toast.success(t('common.copied'));
+                      },
+                    });
+                  }
+
+                  // Pin / Unpin
                   menuOptions.push({
-                    label: t('contextMenu.delete'),
-                    danger: true,
-                    onClick: () => handleDelete(contextMenu.itemId),
+                    label: targetClip.is_pinned ? t('contextMenu.unpin') : t('contextMenu.pin'),
+                    onClick: () => handleTogglePin(targetClip.id),
                   });
 
-                  return menuOptions;
-                })()
-              }
+                  // Plain text actions
+                  if (targetClip.clip_type !== 'image') {
+                    menuOptions.push({
+                      label: t('contextMenu.pastePlainText'),
+                      onClick: () => handlePastePlainText(targetClip.id),
+                    });
+                    menuOptions.push({
+                      label: t('contextMenu.copyPlainText'),
+                      onClick: () => handleCopyPlainText(targetClip),
+                    });
+                    menuOptions.push({
+                      label: t('contextMenu.saveAsNote'),
+                      onClick: async () => {
+                        try {
+                          await invoke('save_clip_as_note', { clipUuid: targetClip.id });
+                          toast.success(t('notepad.noteCreated'));
+                        } catch (err) {
+                          console.error('Failed to save clip as note:', err);
+                        }
+                      },
+                    });
+                  }
+                }
+
+                menuOptions.push({
+                  label: t('contextMenu.delete'),
+                  danger: true,
+                  onClick: () => handleDelete(contextMenu.itemId),
+                });
+
+                return menuOptions;
+              })()}
             />
           )}
 
@@ -848,6 +861,7 @@ function App() {
               setNewFolderName('');
               setShowAddFolderModal(true);
             }}
+            onNotepadClick={() => openNotepad()}
             onMoreClick={openSettings}
             onMoveClip={handleMoveClip} // Legacy, but kept for interface
             // Simulated Drag Props

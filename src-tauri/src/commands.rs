@@ -2,7 +2,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_x::{start_listening, stop_listening, write_text};
 
 use crate::database::Database;
-use crate::models::{Clip, ClipboardItem, Folder, FolderItem};
+use crate::models::{Clip, ClipboardItem, Folder, FolderItem, Note, NoteItem};
 use crate::settings_manager::SettingsManager;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use sqlx::SqlitePool;
@@ -11,6 +11,18 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+fn note_to_item(note: &Note) -> NoteItem {
+    NoteItem {
+        id: note.uuid.clone(),
+        title: note.title.clone(),
+        content: note.content.clone(),
+        color: note.color.clone().unwrap_or_else(|| "default".to_string()),
+        is_pinned: note.is_pinned,
+        created_at: note.created_at.to_rfc3339(),
+        updated_at: note.updated_at.to_rfc3339(),
+    }
+}
 
 fn clip_to_list_item(clip: &Clip, image_path: Option<&str>) -> ClipboardItem {
     let content_str = if clip.clip_type == "image" {
@@ -1162,4 +1174,370 @@ pub fn get_layout_config() -> serde_json::Value {
     serde_json::json!({
         "window_height": crate::constants::WINDOW_HEIGHT,
     })
+}
+
+// -----------------------------------------------------------------------------
+// Notepad / Quick Notes Commands
+// -----------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_notes(
+    query: Option<String>,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<Vec<NoteItem>, String> {
+    let pool = &db.pool;
+    let notes: Vec<Note> = if let Some(q) = query {
+        let q_trimmed = q.trim();
+        if !q_trimmed.is_empty() {
+            let pattern = format!("%{}%", q_trimmed);
+            sqlx::query_as(
+                r#"
+                SELECT * FROM notes
+                WHERE title LIKE ? OR content LIKE ?
+                ORDER BY is_pinned DESC, updated_at DESC
+                "#,
+            )
+            .bind(&pattern)
+            .bind(&pattern)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?
+        } else {
+            sqlx::query_as(r#"SELECT * FROM notes ORDER BY is_pinned DESC, updated_at DESC"#)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+    } else {
+        sqlx::query_as(r#"SELECT * FROM notes ORDER BY is_pinned DESC, updated_at DESC"#)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?
+    };
+
+    Ok(notes.iter().map(note_to_item).collect())
+}
+
+#[tauri::command]
+pub async fn get_note(id: String, db: tauri::State<'_, Arc<Database>>) -> Result<NoteItem, String> {
+    let pool = &db.pool;
+    let note: Option<Note> = sqlx::query_as(r#"SELECT * FROM notes WHERE uuid = ?"#)
+        .bind(&id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match note {
+        Some(n) => Ok(note_to_item(&n)),
+        None => Err("Note not found".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn create_note(
+    title: Option<String>,
+    content: String,
+    color: Option<String>,
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<NoteItem, String> {
+    let pool = &db.pool;
+    let uuid = uuid::Uuid::new_v4().to_string();
+    let note_color = color.unwrap_or_else(|| "default".to_string());
+
+    let note_title = match title {
+        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
+        _ => {
+            let first_line = content.lines().next().unwrap_or("").trim();
+            if first_line.is_empty() {
+                "Untitled Note".to_string()
+            } else {
+                first_line.chars().take(50).collect::<String>()
+            }
+        }
+    };
+
+    sqlx::query(
+        r#"
+        INSERT INTO notes (uuid, title, content, color, is_pinned, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        "#,
+    )
+    .bind(&uuid)
+    .bind(&note_title)
+    .bind(&content)
+    .bind(&note_color)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let note: Note = sqlx::query_as(r#"SELECT * FROM notes WHERE uuid = ?"#)
+        .bind(&uuid)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let item = note_to_item(&note);
+    let _ = app.emit("notes-changed", &item);
+
+    Ok(item)
+}
+
+#[tauri::command]
+pub async fn update_note(
+    id: String,
+    title: Option<String>,
+    content: String,
+    color: Option<String>,
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<NoteItem, String> {
+    let pool = &db.pool;
+
+    let note_title = match title {
+        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
+        _ => {
+            let first_line = content.lines().next().unwrap_or("").trim();
+            if first_line.is_empty() {
+                "Untitled Note".to_string()
+            } else {
+                first_line.chars().take(50).collect::<String>()
+            }
+        }
+    };
+
+    let note_color = color.unwrap_or_else(|| "default".to_string());
+
+    sqlx::query(
+        r#"
+        UPDATE notes
+        SET title = ?, content = ?, color = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE uuid = ?"#,
+    )
+    .bind(&note_title)
+    .bind(&content)
+    .bind(&note_color)
+    .bind(&id)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let note: Option<Note> = sqlx::query_as(r#"SELECT * FROM notes WHERE uuid = ?"#)
+        .bind(&id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match note {
+        Some(n) => {
+            let item = note_to_item(&n);
+            let _ = app.emit("notes-changed", &item);
+            Ok(item)
+        }
+        None => Err("Note not found".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn delete_note(
+    id: String,
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<(), String> {
+    let pool = &db.pool;
+    sqlx::query(r#"DELETE FROM notes WHERE uuid = ?"#)
+        .bind(&id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let _ = app.emit(
+        "notes-changed",
+        &serde_json::json!({ "id": id, "action": "delete" }),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn toggle_pin_note(
+    id: String,
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<bool, String> {
+    let pool = &db.pool;
+    let current_pinned: Option<bool> =
+        sqlx::query_scalar(r#"SELECT is_pinned FROM notes WHERE uuid = ?"#)
+            .bind(&id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    match current_pinned {
+        Some(is_pinned) => {
+            let new_pinned = !is_pinned;
+            sqlx::query(r#"UPDATE notes SET is_pinned = ? WHERE uuid = ?"#)
+                .bind(new_pinned)
+                .bind(&id)
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let _ = app.emit(
+                "notes-changed",
+                &serde_json::json!({ "id": id, "action": "toggle_pin", "is_pinned": new_pinned }),
+            );
+            Ok(new_pinned)
+        }
+        None => Err("Note not found".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn save_clip_as_note(
+    clip_uuid: String,
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<NoteItem, String> {
+    let pool = &db.pool;
+    let clip: Option<Clip> = sqlx::query_as(r#"SELECT * FROM clips WHERE uuid = ?"#)
+        .bind(&clip_uuid)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match clip {
+        Some(c) => {
+            if c.clip_type == "image" {
+                return Err("Image clips cannot be converted to text notes".to_string());
+            }
+            let content_str = String::from_utf8_lossy(&c.content).to_string();
+            let first_line = content_str.lines().next().unwrap_or("").trim();
+            let title = if first_line.is_empty() {
+                "Clip Note".to_string()
+            } else {
+                first_line.chars().take(50).collect::<String>()
+            };
+
+            create_note(
+                Some(title),
+                content_str,
+                Some("default".to_string()),
+                app,
+                db,
+            )
+            .await
+        }
+        None => Err("Clip not found".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn paste_note(
+    id: String,
+    window_label: Option<String>,
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<(), String> {
+    let pool = &db.pool;
+    let note: Option<Note> = sqlx::query_as(r#"SELECT * FROM notes WHERE uuid = ?"#)
+        .bind(&id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match note {
+        Some(n) => {
+            let _guard = crate::clipboard::CLIPBOARD_SYNC.lock().await;
+            if let Err(e) = stop_listening().await {
+                log::error!("Failed to stop listener: {}", e);
+            }
+
+            let mut last_err = String::new();
+            for i in 0..5 {
+                match write_text(n.content.clone()).await {
+                    Ok(_) => {
+                        last_err.clear();
+                        break;
+                    }
+                    Err(e) => {
+                        last_err = e.to_string();
+                        log::warn!(
+                            "Clipboard write attempt {} failed: {}. Retrying...",
+                            i + 1,
+                            last_err
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                }
+            }
+
+            let app_clone = app.clone();
+            if let Err(e) = start_listening(app_clone).await {
+                log::error!("Failed to restart listener: {}", e);
+            }
+
+            if !last_err.is_empty() {
+                return Err(format!("Failed to write note to clipboard: {}", last_err));
+            }
+
+            let win = window_label
+                .as_deref()
+                .and_then(|lbl| app.get_webview_window(lbl));
+
+            if let Some(w) = win {
+                let label = w.label().to_string();
+                if label == "main" {
+                    crate::animate_window_hide(
+                        &w,
+                        Some(Box::new(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                            crate::clipboard::send_paste_input();
+                        })),
+                    );
+                } else {
+                    let _ = w.hide();
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    crate::clipboard::send_paste_input();
+                }
+            } else {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                crate::clipboard::send_paste_input();
+            }
+
+            Ok(())
+        }
+        None => Err("Note not found".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn open_notepad_window(app: AppHandle, note_id: Option<String>) -> Result<(), String> {
+    let url_query = match &note_id {
+        Some(id) if !id.is_empty() => format!("index.html?window=notepad&noteId={}", id),
+        _ => "index.html?window=notepad".to_string(),
+    };
+
+    if let Some(win) = app.get_webview_window("notepad") {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        if let Some(id) = note_id {
+            let _ = win.emit("select-note", id);
+        }
+        return Ok(());
+    }
+
+    let win_builder =
+        tauri::WebviewWindowBuilder::new(&app, "notepad", tauri::WebviewUrl::App(url_query.into()))
+            .title("PastePaw Notepad")
+            .inner_size(400.0, 480.0)
+            .min_inner_size(280.0, 220.0)
+            .resizable(true)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true);
+
+    win_builder.build().map_err(|e| e.to_string())?;
+
+    Ok(())
 }

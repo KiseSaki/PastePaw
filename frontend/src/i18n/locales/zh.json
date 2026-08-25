@@ -43,6 +43,7 @@
     "paste": "粘贴",
     "pastePlainText": "粘贴纯文本",
     "copyPlainText": "复制纯文本",
+    "saveAsNote": "保存为便签",
     "pin": "置顶此项",
     "unpin": "取消置顶",
     "openUrl": "在浏览器中打开",
@@ -162,5 +163,30 @@
     "folderDeleteFailed": "删除文件夹失败",
     "folderRenameFailed": "重命名文件夹失败",
     "copyFailed": "复制失败"
+  },
+  "notepad": {
+    "title": "便签记事本",
+    "openNotepad": "打开便签",
+    "newNote": "新建便签",
+    "searchPlaceholder": "搜索便签内容或标题...",
+    "noNotes": "暂无便签",
+    "noNotesDesc": "点击 \"+ 新建便签\" 开始记录",
+    "titlePlaceholder": "便签标题（可选）",
+    "contentPlaceholder": "在此输入便签内容...",
+    "alwaysOnTop": "置顶窗口",
+    "cancelAlwaysOnTop": "取消置顶",
+    "opacity": "窗口透明度",
+    "copyAll": "复制全文",
+    "pasteToApp": "直接粘贴至应用",
+    "pasteToAppTip": "Ctrl+Enter 直接粘贴至底层应用",
+    "deleteNote": "删除便签",
+    "deleteNoteConfirm": "确定要删除这条便签吗？",
+    "noteDeleted": "便签已删除",
+    "noteCreated": "便签已创建",
+    "noteSaved": "便签已保存",
+    "charCount": "{{chars}} 字符，{{words}} 字",
+    "pinned": "已置顶",
+    "unpinned": "已取消置顶",
+    "sidebar": "侧边栏"
   }
 }

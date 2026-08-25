@@ -183,8 +183,9 @@ pub fn run_app() {
             let title_i = MenuItem::with_id(app, "title", &title, false, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit PastePaw", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
+            let notepad_i = MenuItem::with_id(app, "notepad", "Notepad (便签)", true, None::<&str>)?;
             let separator_i = PredefinedMenuItem::separator(app)?;
-            let menu = Menu::with_items(app, &[&title_i, &show_i, &separator_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&title_i, &show_i, &notepad_i, &separator_i, &quit_i])?;
 
             // Pick icon based on current system theme: white for dark, black for light
             let is_dark = dark_light::detect().map(|m| m == dark_light::Mode::Dark).unwrap_or(false);
@@ -211,6 +212,11 @@ pub fn run_app() {
                         if let Some(win) = app.get_webview_window("main") {
                             position_window_at_bottom(&win);
                         }
+                    } else if event.id.as_ref() == "notepad" {
+                        let app_handle = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = commands::open_notepad_window(app_handle, None).await;
+                        });
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -329,7 +335,17 @@ pub fn run_app() {
             commands::get_layout_config,
             commands::test_log,
             commands::focus_window,
-            commands::refresh_window
+            commands::refresh_window,
+            // Notepad commands
+            commands::get_notes,
+            commands::get_note,
+            commands::create_note,
+            commands::update_note,
+            commands::delete_note,
+            commands::toggle_pin_note,
+            commands::save_clip_as_note,
+            commands::paste_note,
+            commands::open_notepad_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

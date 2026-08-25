@@ -21,7 +21,17 @@ interface ClipCardProps {
 
 export const ClipCard = memo(
   forwardRef<HTMLDivElement, ClipCardProps>(function ClipCard(
-    { clip, index, isSelected, onSelect, onPaste, onCopy, onTogglePin, onDragStart, onContextMenu }: ClipCardProps,
+    {
+      clip,
+      index,
+      isSelected,
+      onSelect,
+      onPaste,
+      onCopy,
+      onTogglePin,
+      onDragStart,
+      onContextMenu,
+    }: ClipCardProps,
     ref
   ) {
     const { t } = useTranslation();
@@ -113,10 +123,10 @@ export const ClipCard = memo(
         return (
           <div className="flex h-full flex-col justify-center gap-2">
             <div
-              className="h-16 w-full rounded-xl border border-black/10 shadow-inner flex items-center justify-center text-xs font-bold font-mono tracking-wider drop-shadow"
+              className="flex h-16 w-full items-center justify-center rounded-xl border border-black/10 font-mono text-xs font-bold tracking-wider shadow-inner drop-shadow"
               style={{ backgroundColor: smartContent.color }}
             />
-            <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-foreground/90">
+            <div className="flex items-center gap-1.5 font-mono text-xs font-medium text-foreground/90">
               <Palette size={13} className="text-muted-foreground" />
               <span>{smartContent.color}</span>
             </div>
@@ -287,7 +297,7 @@ export const ClipCard = memo(
                 className={clsx(
                   'transition-transform',
                   clip.is_pinned
-                    ? 'fill-amber-400 text-amber-500 rotate-45'
+                    ? 'rotate-45 fill-amber-400 text-amber-500'
                     : 'text-foreground/70 hover:text-foreground'
                 )}
               />
@@ -312,12 +322,18 @@ export const ClipCard = memo(
             </button>
           </div>
 
-          <div data-el="clip-card-content" className="relative z-10 flex-1 overflow-hidden bg-card/90 p-2">
+          <div
+            data-el="clip-card-content"
+            className="relative z-10 flex-1 overflow-hidden bg-card/90 p-2"
+          >
             {renderedContent}
             <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-card/100 to-card/30" />
           </div>
 
-          <div data-el="clip-card-footer" className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-card via-card/100 to-transparent/0 px-3 py-1.5">
+          <div
+            data-el="clip-card-footer"
+            className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-card via-card/100 to-transparent/0 px-3 py-1.5"
+          >
             <span className="text-[11px] font-medium text-muted-foreground/50">
               {clip.clip_type === 'image'
                 ? t('clipList.imageSize', { size: imageSizeKb })

@@ -1,6 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { FolderItem, SortMode } from '../types';
-import { Search, Plus, MoreHorizontal, X, ArrowUpDown, Check, Clock, Calendar, AppWindow, Tag, AlignLeft } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  MoreHorizontal,
+  X,
+  ArrowUpDown,
+  Check,
+  Clock,
+  Calendar,
+  AppWindow,
+  Tag,
+  AlignLeft,
+  StickyNote,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import { useTranslation } from 'react-i18next';
 
@@ -13,6 +26,7 @@ interface ControlBarProps {
   onSearchClick: () => void;
   onAddClick: () => void;
   onMoreClick: () => void;
+  onNotepadClick?: () => void;
   showSearch: boolean;
   searchQuery: string;
   onSearchChange: (query: string) => void;
@@ -36,6 +50,7 @@ export function ControlBar({
   onSearchClick,
   onAddClick,
   onMoreClick,
+  onNotepadClick,
   showSearch,
   searchQuery,
   onSearchChange,
@@ -249,7 +264,11 @@ export function ControlBar({
   };
 
   return (
-    <div data-el="control-bar" className="drag-area relative z-30 flex items-end gap-4 px-6 pb-0" style={style}>
+    <div
+      data-el="control-bar"
+      className="drag-area relative z-30 flex items-end gap-4 px-6 pb-0"
+      style={style}
+    >
       {/* Search Toggle / Input */}
       <div
         data-el="search-toggle"
@@ -260,7 +279,10 @@ export function ControlBar({
       >
         {/** Search Render Code Omitted here for brevity, referencing original structure **/}
         {showSearch ? (
-          <div data-el="search-input-wrapper" className="animate-in fade-in slide-in-from-left-2 flex w-full items-center gap-2 rounded-full border border-border bg-input px-3 py-1.5 duration-300">
+          <div
+            data-el="search-input-wrapper"
+            className="animate-in fade-in slide-in-from-left-2 flex w-full items-center gap-2 rounded-full border border-border bg-input px-3 py-1.5 duration-300"
+          >
             <Search size={18} className="text-blue-400" />
             <input
               data-el="search-input"
@@ -391,8 +413,8 @@ export function ControlBar({
           </button>
 
           {showSortMenu && (
-            <div className="absolute right-0 top-full mt-2 z-50 min-w-[12rem] overflow-hidden rounded-xl border border-border bg-popover/95 backdrop-blur-md p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95">
-              <div className="px-2.5 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <div className="animate-in fade-in-0 zoom-in-95 absolute right-0 top-full z-50 mt-2 min-w-[12rem] overflow-hidden rounded-xl border border-border bg-popover/95 p-1.5 shadow-2xl backdrop-blur-md">
+              <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {t('sort.title')}
               </div>
               {[
@@ -411,7 +433,7 @@ export function ControlBar({
                   className={clsx(
                     'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
                     sortMode === mode
-                      ? 'bg-primary text-primary-foreground font-semibold'
+                      ? 'bg-primary font-semibold text-primary-foreground'
                       : 'text-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
@@ -429,10 +451,21 @@ export function ControlBar({
         <button
           data-el="add-folder-btn"
           onClick={onAddClick}
+          title={t('folders.addFolder')}
           className="rounded-lg p-2 text-emerald-400 transition-colors hover:bg-emerald-500/10"
         >
           <Plus size={20} />
         </button>
+        {onNotepadClick && (
+          <button
+            data-el="notepad-btn"
+            onClick={onNotepadClick}
+            title={t('notepad.openNotepad')}
+            className="rounded-lg p-2 text-amber-400 transition-colors hover:bg-amber-500/10"
+          >
+            <StickyNote size={19} />
+          </button>
+        )}
         <button
           data-el="settings-btn"
           onClick={onMoreClick}

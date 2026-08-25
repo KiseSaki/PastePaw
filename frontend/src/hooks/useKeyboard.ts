@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 interface KeyboardOptions {
   onClose?: () => void;
   onSearch?: () => void;
+  onOpenNotepad?: () => void;
   onDelete?: () => void;
   onPin?: () => void;
   onNavigateLeft?: () => void;
@@ -18,9 +19,7 @@ export function useKeyboard(options: KeyboardOptions) {
       const target = e.target as HTMLElement | null;
       const isInputFocused =
         target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable);
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
 
       if (e.key === 'Escape' && options.onClose) {
         e.preventDefault();
@@ -31,6 +30,12 @@ export function useKeyboard(options: KeyboardOptions) {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F') && options.onSearch) {
         e.preventDefault();
         options.onSearch();
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'n' || e.key === 'N') && options.onOpenNotepad) {
+        e.preventDefault();
+        options.onOpenNotepad();
         return;
       }
 
@@ -50,7 +55,14 @@ export function useKeyboard(options: KeyboardOptions) {
       }
 
       // Normal Paste: Enter
-      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && options.onPaste) {
+      if (
+        e.key === 'Enter' &&
+        !e.shiftKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        options.onPaste
+      ) {
         if (!isInputFocused) {
           e.preventDefault();
           options.onPaste();
@@ -62,7 +74,14 @@ export function useKeyboard(options: KeyboardOptions) {
       if (isInputFocused) return;
 
       // Direct number key paste: 1..9
-      if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.metaKey && !e.altKey && options.onQuickPaste) {
+      if (
+        e.key >= '1' &&
+        e.key <= '9' &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        options.onQuickPaste
+      ) {
         e.preventDefault();
         const index = parseInt(e.key, 10) - 1;
         options.onQuickPaste(index);
