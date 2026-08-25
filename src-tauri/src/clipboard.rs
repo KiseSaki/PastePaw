@@ -34,7 +34,7 @@ use windows::Win32::System::ProcessStatus::{GetModuleBaseNameW, GetModuleFileNam
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_INSERT, VK_SHIFT,
+    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL, VIRTUAL_KEY,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Shell::{
@@ -457,6 +457,16 @@ async fn process_clipboard_change(
     );
     let emit_ms = emit_started.elapsed().as_millis();
 
+    if let Some(settings_mgr) = app.try_state::<Arc<crate::settings_manager::SettingsManager>>() {
+        let s = settings_mgr.get();
+        let max_items = s.max_items;
+        let auto_delete_days = s.auto_delete_days;
+        let pool = pool.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = crate::commands::enforce_clipboard_limits(&pool, max_items, auto_delete_days).await;
+        });
+    }
+
     log::info!(
         "[perf][clipboard_ingest] type={} existing={} full_bytes={} thumb_bytes={} image_read_ms={} decode_ms={} text_read_ms={} db_lookup_ms={} db_write_ms={} emit_ms={} total_ms={}",
         clip_type,
@@ -833,14 +843,15 @@ unsafe fn extract_icon(path: &str) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 pub fn send_paste_input() {
-    log::info!("send_paste_input: sending Shift+Insert");
+    log::info!("send_paste_input: sending Ctrl+V");
     unsafe {
-        let inputs = vec![
+        let vk_v = VIRTUAL_KEY(0x56);
+        let inputs = [
             INPUT {
                 r#type: INPUT_KEYBOARD,
                 Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
                     ki: KEYBDINPUT {
-                        wVk: VK_SHIFT,
+                        wVk: VK_CONTROL,
                         ..Default::default()
                     },
                 },
@@ -849,7 +860,7 @@ pub fn send_paste_input() {
                 r#type: INPUT_KEYBOARD,
                 Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
                     ki: KEYBDINPUT {
-                        wVk: VK_INSERT,
+                        wVk: vk_v,
                         ..Default::default()
                     },
                 },
@@ -858,7 +869,7 @@ pub fn send_paste_input() {
                 r#type: INPUT_KEYBOARD,
                 Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
                     ki: KEYBDINPUT {
-                        wVk: VK_INSERT,
+                        wVk: vk_v,
                         dwFlags: KEYEVENTF_KEYUP,
                         ..Default::default()
                     },
@@ -868,7 +879,7 @@ pub fn send_paste_input() {
                 r#type: INPUT_KEYBOARD,
                 Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
                     ki: KEYBDINPUT {
-                        wVk: VK_SHIFT,
+                        wVk: VK_CONTROL,
                         dwFlags: KEYEVENTF_KEYUP,
                         ..Default::default()
                     },

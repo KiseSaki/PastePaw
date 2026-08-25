@@ -6,7 +6,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{TrayIcon, TrayIconBuilder},
-    Manager,
+    Emitter, Manager,
 };
 use tauri_plugin_aptabase::EventTracker;
 #[cfg(not(feature = "app-store"))]
@@ -16,7 +16,6 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 static IS_ANIMATING: AtomicBool = AtomicBool::new(false);
 static LAST_SHOW_TIME: AtomicI64 = AtomicI64::new(0);
 
-mod ai;
 mod clipboard;
 mod commands;
 mod constants;
@@ -145,55 +144,22 @@ pub fn run_app() {
                         let label = window.label();
                         // Only auto-hide the main window
                         if label == "main" {
-                            if window.app_handle().get_webview_window("settings").is_some() {
-                                // Settings window is open, keep main window visible
-                                return;
+                            if let Some(settings_win) = window.app_handle().get_webview_window("settings") {
+                                if settings_win.is_visible().unwrap_or(false) {
+                                    // Settings window is visible, keep main window visible
+                                    return;
+                                }
                             }
 
-                            // Debounce: Ignore blur events immediately after showing
+                            // Avoid debounce conflict with recent show (< 200ms)
                             let last_show = LAST_SHOW_TIME.load(Ordering::SeqCst);
                             let now = chrono::Local::now().timestamp_millis();
-                            let debounce_ms = 500;
-                            if now - last_show < debounce_ms {
+                            if now - last_show < 200 {
                                 return;
                             }
 
-                        if let Some(win) = window.app_handle().get_webview_window(label) {
-                                 // Safety checks:
-                                 // 1. If we are already animating (e.g. hiding via hotkey), don't interfere.
-                                 if IS_ANIMATING.load(Ordering::SeqCst) {
-                                     return;
-                                 }
-                                 // 2. If the window is not visible (e.g. just hidden programmatically), don't try to move/show it.
-                                 if !win.is_visible().unwrap_or(false) {
-                                     return;
-                                 }
-
-                                 // Check if cursor is on a different monitor
-                                 let current_monitor = win.current_monitor().ok().flatten();
-                                 let cursor_monitor = get_monitor_at_cursor(&win);
-
-                                 let mut moved_screens = false;
-                                 if let (Some(cm), Some(crm)) = (&current_monitor, &cursor_monitor) {
-                                     if cm.position().x != crm.position().x || cm.position().y != crm.position().y {
-                                         moved_screens = true;
-                                     }
-                                 }
-
-                                 if moved_screens {
-                                     // User clicked on another screen, move window there immediately
-                                     position_window_at_bottom(&win);
-                                     let _ = win.show();
-                                     let _ = win.set_focus();
-                                 } else {
-                                     // Normal blur handling (hide)
-                                     if win.is_visible().unwrap_or(false) {
-                                         let win_clone = win.clone();
-                                         std::thread::spawn(move || {
-                                             crate::animate_window_hide(&win_clone, None);
-                                         });
-                                     }
-                                 }
+                            if let Some(win) = window.app_handle().get_webview_window(label) {
+                                crate::animate_window_hide(&win, None);
                             }
                         }
                     }
@@ -327,6 +293,15 @@ pub fn run_app() {
                 }
             });
 
+            // Enforce clipboard limits on startup
+            let db_for_cleanup = db_for_clipboard.clone();
+            let app_handle_for_cleanup = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let settings_mgr = app_handle_for_cleanup.state::<Arc<SettingsManager>>();
+                let s = settings_mgr.get();
+                let _ = commands::enforce_clipboard_limits(&db_for_cleanup.pool, s.max_items, s.auto_delete_days).await;
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -335,6 +310,8 @@ pub fn run_app() {
             commands::get_clip,
             commands::get_clip_detail,
             commands::paste_clip,
+            commands::paste_plain_text,
+            commands::toggle_pin_clip,
             commands::delete_clip,
             commands::move_to_folder,
             commands::create_folder,
@@ -358,7 +335,6 @@ pub fn run_app() {
             commands::pick_file,
             commands::get_layout_config,
             commands::test_log,
-            commands::ai_process_clip,
             commands::focus_window,
             commands::refresh_window
         ])
@@ -427,23 +403,28 @@ pub fn animate_window_show(window: &tauri::WebviewWindow) {
             let _ = window.show();
             let _ = window.set_focus();
 
-            // When floating above taskbar, ensure window stays on top
-            if float_above_taskbar {
-                if let Ok(handle) = window.hwnd() {
-                    use windows::Win32::Foundation::HWND;
-                    use windows::Win32::UI::WindowsAndMessaging::{
-                        SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-                    };
-                    let hwnd = HWND(handle.0 as _);
-                    let hwnd_topmost = HWND(-1 as _); // HWND_TOPMOST
-                    unsafe {
+            if let Ok(handle) = window.hwnd() {
+                use windows::Win32::Foundation::HWND;
+                use windows::Win32::UI::WindowsAndMessaging::{
+                    BringWindowToTop, SetForegroundWindow, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
+                    SWP_SHOWWINDOW,
+                };
+                let hwnd = HWND(handle.0 as _);
+                let hwnd_topmost = HWND(-1 as _); // HWND_TOPMOST
+                unsafe {
+                    if float_above_taskbar {
                         let _ = SetWindowPos(
                             hwnd,
                             Some(hwnd_topmost),
-                            0, 0, 0, 0,
-                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                            0,
+                            0,
+                            0,
+                            0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
                         );
                     }
+                    let _ = BringWindowToTop(hwnd);
+                    let _ = SetForegroundWindow(hwnd);
                 }
             }
 
@@ -466,8 +447,30 @@ pub fn animate_window_show(window: &tauri::WebviewWindow) {
                 x: work_area.position.x + side_margin_px,
                 y: target_y,
             }));
+
+            if let Ok(handle) = window.hwnd() {
+                use windows::Win32::Foundation::HWND;
+                use windows::Win32::UI::WindowsAndMessaging::{
+                    BringWindowToTop, SetForegroundWindow,
+                };
+                let hwnd = HWND(handle.0 as _);
+                unsafe {
+                    let _ = BringWindowToTop(hwnd);
+                    let _ = SetForegroundWindow(hwnd);
+                }
+            }
+
+            let _ = window.emit("window-show", ());
         }
         IS_ANIMATING.store(false, Ordering::SeqCst);
+
+        // If the user already clicked away while the window was sliding up, hide immediately
+        if !window.is_focused().unwrap_or(true) {
+            let win_clone = window.clone();
+            std::thread::spawn(move || {
+                crate::animate_window_hide(&win_clone, None);
+            });
+        }
     });
 }
 
@@ -475,28 +478,74 @@ pub fn animate_window_hide(
     window: &tauri::WebviewWindow,
     on_done: Option<Box<dyn FnOnce() + Send>>,
 ) {
-    // Atomically check if false and set to true. If already true, return.
-    if IS_ANIMATING
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        return;
-    }
-
-    let (side_margin, bottom_margin, float_above_taskbar) = {
-        let manager = window.state::<Arc<crate::settings_manager::SettingsManager>>();
-        let s = manager.get();
-        let is_mica = s.mica_effect != "clear";
-        let no_corners = !s.round_corners;
-        let side = if is_mica && no_corners { 0.0 } else { constants::WINDOW_MARGIN };
-        let bottom = if is_mica && no_corners { 0.0 } else { constants::WINDOW_MARGIN };
-        (side, bottom, s.float_above_taskbar)
-    };
-
     let window = window.clone();
 
     std::thread::spawn(move || {
-        if let Some(monitor) = window.current_monitor().ok().flatten() {
+        // Wait briefly if show animation is currently in progress
+        let start = std::time::Instant::now();
+        while IS_ANIMATING.load(Ordering::SeqCst) && start.elapsed().as_millis() < 250 {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        // Atomically check if false and set to true. If already true, return.
+        if IS_ANIMATING
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+
+        let (side_margin, bottom_margin, float_above_taskbar) = {
+            let manager = window.state::<Arc<crate::settings_manager::SettingsManager>>();
+            let s = manager.get();
+            let is_mica = s.mica_effect != "clear";
+            let no_corners = !s.round_corners;
+            let side = if is_mica && no_corners { 0.0 } else { constants::WINDOW_MARGIN };
+            let bottom = if is_mica && no_corners { 0.0 } else { constants::WINDOW_MARGIN };
+            (side, bottom, s.float_above_taskbar)
+        };
+
+        // Ensure window stays topmost in Z-order during animation so background app doesn't hide it immediately
+        if let Ok(handle) = window.hwnd() {
+            use windows::Win32::Foundation::HWND;
+            use windows::Win32::UI::WindowsAndMessaging::{
+                SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+            };
+            let hwnd = HWND(handle.0 as _);
+            unsafe {
+                let _ = SetWindowPos(
+                    hwnd,
+                    Some(HWND_TOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+        }
+
+        let current_pos = window.outer_position().ok();
+        let monitor = window.current_monitor().ok().flatten().or_else(|| {
+            if let Some(pos) = current_pos {
+                if let Ok(monitors) = window.available_monitors() {
+                    for m in monitors {
+                        let mpos = m.position();
+                        let msize = m.size();
+                        if pos.x >= mpos.x
+                            && pos.x < mpos.x + msize.width as i32
+                            && pos.y >= mpos.y
+                            && pos.y < mpos.y + msize.height as i32
+                        {
+                            return Some(m);
+                        }
+                    }
+                }
+            }
+            None
+        }).or_else(|| get_monitor_at_cursor(&window));
+
+        if let Some(monitor) = monitor {
             let scale_factor = monitor.scale_factor();
             let monitor_pos = monitor.position();
             let monitor_size = monitor.size();
@@ -512,7 +561,9 @@ pub fn animate_window_hide(
                 work_area.position.y + work_area.size.height as i32
             };
 
-            let start_y = reference_bottom - window_height_px as i32 - bottom_margin_px;
+            let start_y = current_pos
+                .map(|p| p.y)
+                .unwrap_or(reference_bottom - window_height_px as i32 - bottom_margin_px);
             let target_y = reference_bottom;
 
             let steps = 15;
@@ -529,6 +580,8 @@ pub fn animate_window_hide(
                 std::thread::sleep(duration);
             }
 
+            let _ = window.hide();
+        } else {
             let _ = window.hide();
         }
         IS_ANIMATING.store(false, Ordering::SeqCst);
