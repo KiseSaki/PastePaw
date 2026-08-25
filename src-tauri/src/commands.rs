@@ -1541,3 +1541,22 @@ pub async fn open_notepad_window(app: AppHandle, note_id: Option<String>) -> Res
 
     Ok(())
 }
+
+#[tauri::command]
+pub async fn set_notepad_always_on_top(
+    enabled: bool,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<(), String> {
+    db.set_setting("notepad_always_on_top", if enabled { "true" } else { "false" })
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_notepad_always_on_top(
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<bool, String> {
+    let val = db.get_setting("notepad_always_on_top").await;
+    Ok(val.map(|v| v == "true").unwrap_or(true))
+}

@@ -301,6 +301,24 @@ pub fn run_app() {
                 let _ = commands::enforce_clipboard_limits(&db_for_cleanup.pool, s.max_items, s.auto_delete_days).await;
             });
 
+            // Auto-open notepad on startup if notepad was pinned or there are pinned notes
+            let db_for_notepad = db_for_clipboard.clone();
+            let app_handle_for_notepad = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+                let has_pinned = db_for_notepad.has_pinned_notes().await;
+                let window_pinned = db_for_notepad
+                    .get_setting("notepad_always_on_top")
+                    .await
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+
+                if has_pinned || window_pinned {
+                    let first_pinned_id = db_for_notepad.get_first_pinned_note_uuid().await;
+                    let _ = commands::open_notepad_window(app_handle_for_notepad, first_pinned_id).await;
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -345,7 +363,9 @@ pub fn run_app() {
             commands::toggle_pin_note,
             commands::save_clip_as_note,
             commands::paste_note,
-            commands::open_notepad_window
+            commands::open_notepad_window,
+            commands::set_notepad_always_on_top,
+            commands::get_notepad_always_on_top
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

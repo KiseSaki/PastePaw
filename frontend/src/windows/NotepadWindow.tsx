@@ -62,12 +62,20 @@ export function NotepadWindow() {
   const opacityRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load Settings
+  // Load Settings and initial Always on Top
   useEffect(() => {
     invoke<Settings>('get_settings').then(setSettings).catch(console.error);
     const unlistenSettings = listen<Settings>('settings-changed', (event) => {
       setSettings(event.payload);
     });
+
+    invoke<boolean>('get_notepad_always_on_top')
+      .then((val) => {
+        setIsAlwaysOnTop(val);
+        getCurrentWindow().setAlwaysOnTop(val).catch(console.error);
+      })
+      .catch(console.error);
+
     return () => {
       unlistenSettings.then((f) => f());
     };
@@ -274,6 +282,7 @@ export function NotepadWindow() {
     setIsAlwaysOnTop(nextState);
     const win = getCurrentWindow();
     await win.setAlwaysOnTop(nextState);
+    invoke('set_notepad_always_on_top', { enabled: nextState }).catch(console.error);
     toast.info(nextState ? t('notepad.alwaysOnTop') : t('notepad.cancelAlwaysOnTop'));
   };
 

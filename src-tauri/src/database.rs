@@ -182,6 +182,40 @@ impl Database {
 
         Ok(())
     }
+
+    pub async fn has_pinned_notes(&self) -> bool {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes WHERE is_pinned = 1")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+        count > 0
+    }
+
+    pub async fn get_first_pinned_note_uuid(&self) -> Option<String> {
+        sqlx::query_scalar("SELECT uuid FROM notes WHERE is_pinned = 1 ORDER BY updated_at DESC LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await
+            .unwrap_or(None)
+    }
+
+    pub async fn get_setting(&self, key: &str) -> Option<String> {
+        sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await
+            .unwrap_or(None)
+    }
+
+    pub async fn set_setting(&self, key: &str, value: &str) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )
+        .bind(key)
+        .bind(value)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }
 
 async fn add_column_if_missing(pool: &SqlitePool, sql: &str) -> Result<(), sqlx::Error> {
