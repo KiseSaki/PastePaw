@@ -34,6 +34,18 @@ export function NotepadWindow() {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('pastepaw_notepad_sidebar_width');
+    if (saved) {
+      const parsed = Number(saved);
+      if (!isNaN(parsed) && parsed >= 48 && parsed <= 420) return parsed;
+    }
+    return 208;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
+
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(true);
   const [opacity, setOpacity] = useState(98);
   const [showOpacitySlider, setShowOpacitySlider] = useState(false);
@@ -178,29 +190,27 @@ export function NotepadWindow() {
   const handleCreateNote = async () => {
     try {
       const newNote = await invoke<NoteItem>('create_note', {
-        title: '',
+        title: null,
         content: '',
         color: 'default',
       });
       setNotes((prev) => [newNote, ...prev]);
       selectNote(newNote);
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 50);
-      toast.success(t('notepad.noteCreated'));
+      textareaRef.current?.focus();
     } catch (err) {
       console.error('Failed to create note:', err);
+      toast.error(t('notepad.createFailed'));
     }
   };
 
   // Delete note
-  const handleDeleteNote = async (idToDelete: string) => {
+  const handleDeleteNote = async (id: string) => {
     try {
-      await invoke('delete_note', { id: idToDelete });
-      const remaining = notes.filter((n) => n.id !== idToDelete);
+      await invoke('delete_note', { id });
+      const remaining = notes.filter((n) => n.id !== id);
       setNotes(remaining);
 
-      if (selectedNoteId === idToDelete) {
+      if (selectedNoteId === id) {
         if (remaining.length > 0) {
           selectNote(remaining[0]);
         } else {
@@ -210,41 +220,49 @@ export function NotepadWindow() {
       toast.success(t('notepad.noteDeleted'));
     } catch (err) {
       console.error('Failed to delete note:', err);
+      toast.error(t('notepad.deleteFailed'));
     }
   };
 
   // Toggle Pin
-  const handleTogglePin = async (noteId: string) => {
+  const handleTogglePin = async (id: string) => {
     try {
-      const newPinned = await invoke<boolean>('toggle_pin_note', { id: noteId });
-      if (selectedNoteId === noteId) {
-        setIsPinned(newPinned);
+      const updated = await invoke<NoteItem>('toggle_pin_note', { id });
+      setNotes((prev) =>
+        prev
+          .map((n) => (n.id === updated.id ? updated : n))
+          .sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0))
+      );
+      if (selectedNoteId === id) {
+        setIsPinned(updated.is_pinned);
       }
-      loadNotes(searchQuery);
     } catch (err) {
       console.error('Failed to toggle pin:', err);
     }
   };
 
-  // Copy all content
+  // Copy full note
   const handleCopyAll = async () => {
-    if (!content) return;
+    if (!content) {
+      toast.info(t('notepad.emptyNote'));
+      return;
+    }
     try {
       await navigator.clipboard.writeText(content);
-      toast.success(t('common.copied'));
+      toast.success(t('notepad.copiedToClipboard'));
     } catch (err) {
-      toast.error(t('notifications.copyFailed'));
+      console.error('Failed to copy note:', err);
     }
   };
 
-  // Paste to App
+  // Paste to application
   const handlePasteToApp = async () => {
-    if (!selectedNoteId) return;
+    if (!content) {
+      toast.info(t('notepad.emptyNote'));
+      return;
+    }
     try {
-      await invoke('paste_note', {
-        id: selectedNoteId,
-        windowLabel: 'notepad',
-      });
+      await invoke('paste_note', { content });
     } catch (err) {
       console.error('Failed to paste note:', err);
     }
@@ -269,6 +287,55 @@ export function NotepadWindow() {
     const win = getCurrentWindow();
     await win.close();
   };
+
+  // Toggle Sidebar
+  const handleToggleSidebar = () => {
+    if (isSidebarOpen) {
+      setIsSidebarOpen(false);
+    } else {
+      setIsSidebarOpen(true);
+      if (sidebarWidth < 48) {
+        setSidebarWidth(208);
+        localStorage.setItem('pastepaw_notepad_sidebar_width', '208');
+      }
+    }
+  };
+
+  // Resizable Divider Drag Handler
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startX = e.clientX;
+    const startW = sidebarWidthRef.current;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const maxAllowed = Math.min(420, Math.floor(window.innerWidth * 0.65));
+      let newW = startW + delta;
+
+      if (newW < 48) {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+        newW = Math.max(48, Math.min(newW, maxAllowed));
+        setSidebarWidth(newW);
+        localStorage.setItem('pastepaw_notepad_sidebar_width', String(newW));
+      }
+    };
+
+    const onMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, []);
 
   // Keyboard Shortcuts inside window
   useEffect(() => {
@@ -323,6 +390,11 @@ export function NotepadWindow() {
 
   const currentColorObj = NOTE_COLORS.find((c) => c.id === color) || NOTE_COLORS[0];
 
+  // Sidebar responsive modes
+  const isStandard = sidebarWidth >= 165;
+  const isCompact = sidebarWidth >= 100 && sidebarWidth < 165;
+  const isMini = sidebarWidth < 100;
+
   return (
     <div
       className={clsx(
@@ -333,10 +405,10 @@ export function NotepadWindow() {
       )}
       style={{ opacity: opacity / 100 }}
     >
-      {/* Custom Title Bar / Header */}
+      {/* Custom Title Bar / Header - Layered with z-30 to prevent popover being covered */}
       <header
         data-tauri-drag-region
-        className="flex h-11 shrink-0 cursor-move items-center justify-between border-b border-border/50 bg-muted/40 px-3 backdrop-blur-md"
+        className="relative z-30 flex h-11 shrink-0 cursor-move items-center justify-between border-b border-border/50 bg-muted/40 px-3 backdrop-blur-md"
       >
         <div className="pointer-events-none flex items-center gap-2">
           <StickyNote size={17} className="text-amber-500" />
@@ -352,7 +424,7 @@ export function NotepadWindow() {
         <div className="flex items-center gap-1">
           {/* Toggle Sidebar */}
           <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            onClick={handleToggleSidebar}
             title={t('notepad.sidebar')}
             className={clsx(
               'flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
@@ -376,7 +448,7 @@ export function NotepadWindow() {
             </button>
 
             {showOpacitySlider && (
-              <div className="animate-in fade-in-0 zoom-in-95 absolute right-0 top-8 z-50 flex w-44 flex-col gap-2 rounded-xl border border-border bg-popover p-3 shadow-xl backdrop-blur-lg">
+              <div className="animate-in fade-in-0 zoom-in-95 bg-card/98 dark:bg-neutral-900/98 absolute right-0 top-9 z-50 flex w-44 flex-col gap-2 rounded-xl border border-border/80 p-3 shadow-2xl backdrop-blur-2xl">
                 <div className="flex justify-between text-xs font-medium">
                   <span className="text-muted-foreground">{t('notepad.opacity')}</span>
                   <span className="font-mono">{opacity}%</span>
@@ -430,43 +502,122 @@ export function NotepadWindow() {
 
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Collapsible Left Sidebar */}
+        {/* Collapsible & Draggable Left Sidebar */}
         {isSidebarOpen && (
-          <aside className="flex w-52 shrink-0 flex-col border-r border-border/50 bg-muted/20">
-            {/* Search & New Note */}
-            <div className="flex flex-col gap-2 border-b border-border/40 p-2">
-              <div className="relative flex items-center">
-                <Search size={13} className="absolute left-2 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder={t('notepad.searchPlaceholder')}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-7 w-full rounded-lg border border-border/50 bg-background/80 pl-7 pr-2 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-amber-500/60"
-                />
-              </div>
+          <aside
+            style={{ width: `${sidebarWidth}px` }}
+            className="flex shrink-0 flex-col border-r border-border/50 bg-muted/20"
+          >
+            {/* Search & New Note Header */}
+            <div className="flex flex-col gap-1.5 border-b border-border/40 p-2">
+              {!isMini ? (
+                <>
+                  <div className="relative flex items-center">
+                    <Search size={13} className="absolute left-2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder={isStandard ? t('notepad.searchPlaceholder') : '搜索...'}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="h-7 w-full rounded-lg border border-border/50 bg-background/80 pl-7 pr-2 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-amber-500/60"
+                    />
+                  </div>
 
-              <button
-                onClick={handleCreateNote}
-                className="flex h-7 items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/15 text-xs font-medium text-amber-600 transition-all hover:bg-amber-500/25 active:scale-[0.98] dark:text-amber-400"
-              >
-                <Plus size={14} />
-                <span>{t('notepad.newNote')}</span>
-              </button>
+                  <button
+                    onClick={handleCreateNote}
+                    title={t('notepad.newNote')}
+                    className="flex h-7 items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/15 text-xs font-medium text-amber-600 transition-all hover:bg-amber-500/25 active:scale-[0.98] dark:text-amber-400"
+                  >
+                    <Plus size={14} />
+                    <span>{isStandard ? t('notepad.newNote') : '新建'}</span>
+                  </button>
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={handleCreateNote}
+                    title={t('notepad.newNote')}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/15 text-amber-600 transition-all hover:bg-amber-500/25 active:scale-95 dark:text-amber-400"
+                  >
+                    <Plus size={15} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Notes List */}
             <div className="no-scrollbar flex-1 space-y-1 overflow-y-auto p-1.5">
               {notes.length === 0 ? (
-                <div className="flex h-40 flex-col items-center justify-center px-2 text-center">
-                  <StickyNote size={24} className="mb-1.5 text-muted-foreground/40" />
-                  <p className="text-xs text-muted-foreground">{t('notepad.noNotes')}</p>
+                <div className="flex h-32 flex-col items-center justify-center px-1 text-center">
+                  <StickyNote size={20} className="mb-1 text-muted-foreground/40" />
+                  {!isMini && (
+                    <p className="text-xs text-muted-foreground">{t('notepad.noNotes')}</p>
+                  )}
                 </div>
               ) : (
                 notes.map((note) => {
                   const isSelected = selectedNoteId === note.id;
                   const colorObj = NOTE_COLORS.find((c) => c.id === note.color) || NOTE_COLORS[0];
+                  const noteTitle = note.title || 'Untitled Note';
 
+                  if (isMini) {
+                    // Mini Icon Mode
+                    return (
+                      <div
+                        key={note.id}
+                        onClick={() => selectNote(note)}
+                        title={`${noteTitle}\n${note.content || '(Empty)'}`}
+                        className={clsx(
+                          'group relative mx-auto flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition-all',
+                          isSelected
+                            ? 'border-amber-500/60 bg-accent shadow-sm'
+                            : 'border-transparent hover:border-border/40 hover:bg-accent/40'
+                        )}
+                      >
+                        <span
+                          className={clsx(
+                            'h-3.5 w-3.5 rounded-full ring-1 ring-border/50',
+                            colorObj.dot
+                          )}
+                        />
+                        {note.is_pinned && (
+                          <Pin
+                            size={8}
+                            className="absolute right-0.5 top-0.5 fill-amber-500 text-amber-500"
+                          />
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (isCompact) {
+                    // Compact Mode
+                    return (
+                      <div
+                        key={note.id}
+                        onClick={() => selectNote(note)}
+                        title={`${noteTitle}\n${note.content || '(Empty)'}`}
+                        className={clsx(
+                          'group relative flex cursor-pointer items-center justify-between rounded-lg border p-1.5 text-left transition-all',
+                          isSelected
+                            ? 'border-amber-500/50 bg-accent/90 shadow-sm'
+                            : 'border-transparent hover:border-border/40 hover:bg-accent/40'
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center gap-1.5 truncate">
+                          <span className={clsx('h-2 w-2 shrink-0 rounded-full', colorObj.dot)} />
+                          <span className="truncate text-xs font-medium text-foreground/90">
+                            {noteTitle}
+                          </span>
+                        </div>
+                        {note.is_pinned && (
+                          <Pin size={10} className="shrink-0 fill-amber-500 text-amber-500" />
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Standard Mode
                   return (
                     <div
                       key={note.id}
@@ -482,7 +633,7 @@ export function NotepadWindow() {
                         <div className="flex min-w-0 items-center gap-1.5">
                           <span className={clsx('h-2 w-2 shrink-0 rounded-full', colorObj.dot)} />
                           <span className="truncate text-xs font-semibold text-foreground/90">
-                            {note.title || 'Untitled Note'}
+                            {noteTitle}
                           </span>
                         </div>
                         {note.is_pinned && (
@@ -531,6 +682,25 @@ export function NotepadWindow() {
           </aside>
         )}
 
+        {/* Resizable Divider Drag Handle */}
+        {isSidebarOpen && (
+          <div
+            onMouseDown={startResizing}
+            className={clsx(
+              'group relative flex w-1.5 shrink-0 cursor-col-resize select-none items-center justify-center transition-colors',
+              isResizing ? 'bg-amber-500/50' : 'hover:bg-amber-500/30'
+            )}
+            title="按住拖拽调整侧边栏宽度"
+          >
+            <div
+              className={clsx(
+                'h-full w-[1px] transition-colors',
+                isResizing ? 'bg-amber-500' : 'bg-border/60 group-hover:bg-amber-500/70'
+              )}
+            />
+          </div>
+        )}
+
         {/* Right / Main Note Editor */}
         <main
           className={clsx(
@@ -539,39 +709,39 @@ export function NotepadWindow() {
           )}
         >
           {/* Note Top Toolbar */}
-          <div className="flex items-center justify-between border-b border-border/40 bg-background/30 px-3 py-1.5 backdrop-blur-sm">
+          <div className="flex shrink-0 items-center justify-between border-b border-border/40 bg-background/30 px-3 py-1.5 backdrop-blur-sm">
             {/* Title Input */}
             <input
               type="text"
               placeholder={t('notepad.titlePlaceholder')}
               value={title}
               onChange={handleTitleChange}
-              className="mr-2 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground/40"
+              className="mr-2 min-w-0 flex-1 truncate bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground/40"
             />
 
-            {/* Color Tag Picker */}
-            <div className="flex items-center gap-1.5">
+            {/* Color Tag Picker & Top Actions */}
+            <div className="flex shrink-0 items-center gap-1.5">
               {NOTE_COLORS.map((c) => (
                 <button
                   key={c.id}
                   onClick={() => handleColorChange(c.id)}
                   title={c.name}
                   className={clsx(
-                    'h-4 w-4 rounded-full transition-transform hover:scale-110',
+                    'h-4 w-4 shrink-0 rounded-full transition-transform hover:scale-110',
                     c.dot,
                     color === c.id && 'scale-110 ring-2 ring-amber-500 ring-offset-1'
                   )}
                 />
               ))}
 
-              <div className="mx-1 h-3.5 w-[1px] bg-border/40" />
+              <div className="mx-1 h-3.5 w-[1px] shrink-0 bg-border/40" />
 
               {/* Pin Note */}
               <button
                 onClick={() => selectedNoteId && handleTogglePin(selectedNoteId)}
                 title={isPinned ? t('notepad.unpinned') : t('notepad.pinned')}
                 className={clsx(
-                  'flex h-6 w-6 items-center justify-center rounded transition-colors',
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors',
                   isPinned
                     ? 'bg-amber-500/20 text-amber-500'
                     : 'text-muted-foreground hover:bg-accent'
@@ -584,7 +754,7 @@ export function NotepadWindow() {
               <button
                 onClick={() => selectedNoteId && handleDeleteNote(selectedNoteId)}
                 title={t('notepad.deleteNote')}
-                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-500/20 hover:text-red-400"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-500/20 hover:text-red-400"
               >
                 <Trash2 size={12} />
               </button>
@@ -603,20 +773,22 @@ export function NotepadWindow() {
             />
           </div>
 
-          {/* Footer Status Bar & Action Buttons */}
-          <footer className="flex h-8 items-center justify-between border-t border-border/40 bg-background/40 px-3 text-[11px] text-muted-foreground backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-              <span>{t('notepad.charCount', { chars: charCount, words: wordCount })}</span>
+          {/* Footer Status Bar & Action Buttons - Single line guaranteed */}
+          <footer className="flex h-8 shrink-0 select-none items-center justify-between border-t border-border/40 bg-background/40 px-3 text-[11px] text-muted-foreground backdrop-blur-sm">
+            <div className="flex min-w-0 items-center gap-1.5 truncate text-[11px]">
+              <span className="truncate">
+                {t('notepad.charCount', { chars: charCount, words: wordCount })}
+              </span>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
               {/* Copy All */}
               <button
                 onClick={handleCopyAll}
-                title="Ctrl+Shift+C"
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+                title={`Ctrl+Shift+C / ${t('notepad.copyAll')}`}
+                className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
               >
-                <Copy size={12} />
+                <Copy size={12} className="shrink-0" />
                 <span>{t('notepad.copyAll')}</span>
               </button>
 
@@ -624,9 +796,9 @@ export function NotepadWindow() {
               <button
                 onClick={handlePasteToApp}
                 title={t('notepad.pasteToAppTip')}
-                className="flex items-center gap-1 rounded-md bg-amber-500 px-2.5 py-1 text-xs font-semibold text-black shadow-sm transition-all hover:bg-amber-400 active:scale-95"
+                className="flex shrink-0 items-center gap-1 rounded-md bg-amber-500 px-2.5 py-1 text-xs font-semibold text-black shadow-sm transition-all hover:bg-amber-400 active:scale-95"
               >
-                <CornerDownLeft size={12} />
+                <CornerDownLeft size={12} className="shrink-0" />
                 <span>{t('notepad.pasteToApp')}</span>
               </button>
             </div>
