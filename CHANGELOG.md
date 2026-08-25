@@ -2,6 +2,28 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.0
+
+### Added
+- Independent Floating Notepad Window: Frameless, draggable, resizable, and always-on-top desktop quick notes with customizable window opacity (40%–100%)
+- Multi-note management: Collapsible sidebar, real-time search, color theme tags, pin notes, and debounced auto-saving to SQLite
+- Direct paste-to-app (`Ctrl+Enter`): Directly write note content to clipboard and simulate keystroke paste into previous foreground application
+- Clip-to-Note conversion: Save any text clipboard history item into a permanent note via context menu
+- Shortcuts & quick actions: `Ctrl+N` for new note, `Ctrl+Shift+C` to copy all text, and dedicated launcher button in ControlBar and system tray menu
+
+### Fixed
+- Fixed floating main window auto-hide behavior when opening settings window
+
+### 新增
+- 独立浮动置顶记事本窗口：支持无边框自由拖拽、四周边缘缩放、始终置顶 (Always on Top) 与窗口透明度调节（40%~100%）
+- 多便签与管理系统：支持折叠式左侧抽屉、实时搜索、主题色标签、置顶便签与 SQLite 防抖实时自动保存
+- 一键粘贴至应用 (`Ctrl+Enter`)：直接将便签内容自动写入剪贴板并模拟按键粘贴至底层活动窗口
+- 剪贴记录转存便签：支持在剪贴板卡片右键菜单中一键“保存为便签”
+- 便捷操作与快捷键：支持 `Ctrl+N` 快速新建、`Ctrl+Shift+C` 复制全文、底部控制栏按钮及系统托盘菜单快速呼出
+
+### 修复
+- 修复打开设置窗口时主悬浮窗无法自动隐藏的问题
+
 ## v1.3.9
 
 ### Added
