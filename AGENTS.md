@@ -164,3 +164,7 @@ Always be truthful and face problems directly. Never fabricate, obscure, or work
 
 ### Changelog
 CHANGELOG.md includes both English and Chinese entries for every version. Always add both when writing a new version section.
+
+### Git Commit Messages
+All git commit messages MUST be written in Chinese (e.g. `feat: 新增...`, `fix: 修复...`, `chore: 升级...`).
+
