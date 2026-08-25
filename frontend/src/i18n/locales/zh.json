@@ -175,7 +175,7 @@
     "contentPlaceholder": "在此输入便签内容...",
     "alwaysOnTop": "置顶窗口",
     "cancelAlwaysOnTop": "取消置顶",
-    "opacity": "窗口透明度",
+    "opacity": "窗口不透明度",
     "copyAll": "复制全文",
     "pasteToApp": "直接粘贴至应用",
     "pasteToAppTip": "Ctrl+Enter 直接粘贴至底层应用",

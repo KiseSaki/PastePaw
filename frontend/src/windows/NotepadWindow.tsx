@@ -469,10 +469,7 @@ export function NotepadWindow() {
 
   return (
     <div
-      className={clsx(
-        'relative flex h-screen w-screen select-none flex-col overflow-hidden border border-border/80 text-foreground shadow-2xl transition-all',
-        currentColorObj.bg
-      )}
+      className="relative flex h-screen w-screen select-none flex-col overflow-hidden border border-border/80 bg-background text-foreground shadow-2xl transition-all"
       style={{
         opacity: opacity / 100,
       }}

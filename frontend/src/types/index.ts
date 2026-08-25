@@ -78,7 +78,7 @@ export const NOTE_COLORS: {
   {
     id: 'default',
     name: 'Default',
-    bg: 'bg-card/90',
+    bg: 'bg-card',
     border: 'border-border/60',
     activeRing: 'ring-border',
     dot: 'bg-muted-foreground',
