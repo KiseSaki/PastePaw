@@ -83,13 +83,18 @@ pub async fn save_settings(app: AppHandle, settings: serde_json::Value) -> Resul
             }
         }
     }
-    log::info!(
-        "save_settings: auto_paste={}, language={}, theme={}",
-        new_settings.auto_paste,
-        new_settings.language,
-        new_settings.theme
-    );
+    let max_items = new_settings.max_items;
+    let auto_delete_days = new_settings.auto_delete_days;
     manager.save(new_settings)?;
+
+    // Enforce limits in background
+    if let Some(db) = app.try_state::<Arc<crate::database::Database>>() {
+        let pool = db.pool.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = crate::commands::enforce_clipboard_limits(&pool, max_items, auto_delete_days).await;
+        });
+    }
+
     Ok(())
 }
 

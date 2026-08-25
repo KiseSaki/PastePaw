@@ -1,5 +1,6 @@
-import { FolderItem } from '../types';
-import { Search, Plus, MoreHorizontal, X } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { FolderItem, SortMode } from '../types';
+import { Search, Plus, MoreHorizontal, X, ArrowUpDown, Check, Clock, Calendar, AppWindow, Tag, AlignLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useTranslation } from 'react-i18next';
 
@@ -7,6 +8,8 @@ interface ControlBarProps {
   folders: FolderItem[];
   selectedFolder: string | null;
   onSelectFolder: (folderId: string | null) => void;
+  sortMode: SortMode;
+  onSortChange: (mode: SortMode) => void;
   onSearchClick: () => void;
   onAddClick: () => void;
   onMoreClick: () => void;
@@ -28,6 +31,8 @@ export function ControlBar({
   folders,
   selectedFolder,
   onSelectFolder,
+  sortMode,
+  onSortChange,
   onSearchClick,
   onAddClick,
   onMoreClick,
@@ -44,6 +49,22 @@ export function ControlBar({
   style,
 }: ControlBarProps) {
   const { t } = useTranslation();
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setShowSortMenu(false);
+      }
+    };
+    if (showSortMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSortMenu]);
 
   const allCategories = [
     { id: null, name: t('folders.all'), count: totalClipCount },
@@ -228,7 +249,7 @@ export function ControlBar({
   };
 
   return (
-    <div data-el="control-bar" className="drag-area flex items-end gap-4 px-6 pb-0" style={style}>
+    <div data-el="control-bar" className="drag-area relative z-30 flex items-end gap-4 px-6 pb-0" style={style}>
       {/* Search Toggle / Input */}
       <div
         data-el="search-toggle"
@@ -349,10 +370,62 @@ export function ControlBar({
       {/* Actions */}
       <div
         data-el="control-bar-actions"
-        className="flex flex-shrink-0 items-center gap-2"
+        className="flex flex-shrink-0 items-center gap-1.5"
         style={{ WebkitAppRegion: 'no-drag' } as any}
         onDoubleClick={(e) => e.stopPropagation()}
       >
+        {/* Sort Menu Button & Dropdown */}
+        <div className="relative z-50" ref={sortMenuRef}>
+          <button
+            data-el="sort-btn"
+            onClick={() => setShowSortMenu(!showSortMenu)}
+            title={t('sort.title')}
+            className={clsx(
+              'rounded-lg p-2 transition-colors',
+              showSortMenu || sortMode !== 'time_desc'
+                ? 'bg-sky-500/20 text-sky-400 ring-1 ring-sky-500/30'
+                : 'text-sky-400/80 hover:bg-sky-500/10 hover:text-sky-400'
+            )}
+          >
+            <ArrowUpDown size={18} />
+          </button>
+
+          {showSortMenu && (
+            <div className="absolute right-0 top-full mt-2 z-50 min-w-[12rem] overflow-hidden rounded-xl border border-border bg-popover/95 backdrop-blur-md p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95">
+              <div className="px-2.5 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                {t('sort.title')}
+              </div>
+              {[
+                { mode: 'time_desc' as SortMode, label: t('sort.timeDesc'), icon: Clock },
+                { mode: 'time_asc' as SortMode, label: t('sort.timeAsc'), icon: Calendar },
+                { mode: 'app' as SortMode, label: t('sort.app'), icon: AppWindow },
+                { mode: 'type' as SortMode, label: t('sort.type'), icon: Tag },
+                { mode: 'length' as SortMode, label: t('sort.length'), icon: AlignLeft },
+              ].map(({ mode, label, icon: Icon }) => (
+                <button
+                  key={mode}
+                  onClick={() => {
+                    onSortChange(mode);
+                    setShowSortMenu(false);
+                  }}
+                  className={clsx(
+                    'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
+                    sortMode === mode
+                      ? 'bg-primary text-primary-foreground font-semibold'
+                      : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon size={14} className="opacity-70" />
+                    <span>{label}</span>
+                  </div>
+                  {sortMode === mode && <Check size={14} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button
           data-el="add-folder-btn"
           onClick={onAddClick}

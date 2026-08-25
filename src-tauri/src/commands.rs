@@ -1,7 +1,6 @@
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_x::{start_listening, stop_listening, write_text};
 
-use crate::ai::{self, AiAction, AiConfig};
 use crate::database::Database;
 use crate::models::{Clip, ClipboardItem, Folder, FolderItem};
 use crate::settings_manager::SettingsManager;
@@ -12,96 +11,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-
-#[tauri::command]
-pub async fn ai_process_clip(
-    app: AppHandle,
-    clip_id: String,
-    action: String,
-    db: tauri::State<'_, Arc<Database>>,
-) -> Result<String, String> {
-    let pool = &db.pool;
-
-    // 1. Get Clip
-    let clip: Clip = sqlx::query_as(r#"SELECT * FROM clips WHERE uuid = ?"#)
-        .bind(&clip_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or("Clip not found")?;
-
-    let text_content =
-        if clip.clip_type == "text" || clip.clip_type == "html" || clip.clip_type == "url" {
-            String::from_utf8_lossy(&clip.content).to_string()
-        } else {
-            return Err("AI processing only supported for text content".to_string());
-        };
-
-    // 2. Get AI Config
-    let manager = app.state::<Arc<SettingsManager>>();
-    let settings = manager.get();
-
-    if settings.ai_api_key.is_empty() {
-        return Err("AI API Key is missing in settings".to_string());
-    }
-
-    let config = AiConfig {
-        provider: settings.ai_provider,
-        api_key: settings.ai_api_key,
-        model: settings.ai_model,
-        base_url: if settings.ai_base_url.is_empty() {
-            None
-        } else {
-            Some(settings.ai_base_url)
-        },
-    };
-
-    let ai_action = match action.as_str() {
-        "summarize" => AiAction::Summarize,
-        "translate" => AiAction::Translate,
-        "explain_code" => AiAction::ExplainCode,
-        "fix_grammar" => AiAction::FixGrammar,
-        _ => return Err("Invalid AI action".to_string()),
-    };
-
-    let custom_prompt = match ai_action {
-        AiAction::Summarize => Some(settings.ai_prompt_summarize),
-        AiAction::Translate => Some(settings.ai_prompt_translate),
-        AiAction::ExplainCode => Some(settings.ai_prompt_explain_code),
-        AiAction::FixGrammar => Some(settings.ai_prompt_fix_grammar),
-    };
-
-    // 3. Call AI
-    let result = ai::process_text(&text_content, ai_action.clone(), &config, custom_prompt)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 4. Update Metadata
-    let mut metadata: serde_json::Value = if let Some(meta_str) = &clip.metadata {
-        serde_json::from_str(meta_str).unwrap_or(serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
-
-    let key = match ai_action {
-        AiAction::Summarize => "ai_summary",
-        AiAction::Translate => "ai_translation",
-        AiAction::ExplainCode => "ai_explanation",
-        AiAction::FixGrammar => "ai_grammar_fix",
-    };
-
-    metadata[key] = serde_json::json!(result);
-    let new_metadata_str = metadata.to_string();
-
-    sqlx::query("UPDATE clips SET metadata = ? WHERE uuid = ?")
-        .bind(&new_metadata_str)
-        .bind(&clip_id)
-        .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(result)
-}
 
 fn clip_to_list_item(clip: &Clip, image_path: Option<&str>) -> ClipboardItem {
     let content_str = if clip.clip_type == "image" {
@@ -116,6 +25,7 @@ fn clip_to_list_item(clip: &Clip, image_path: Option<&str>) -> ClipboardItem {
         content: content_str,
         preview: clip.text_preview.clone(),
         folder_id: clip.folder_id.map(|id| id.to_string()),
+        is_pinned: clip.is_pinned,
         created_at: clip.created_at.to_rfc3339(),
         source_app: clip.source_app.clone(),
         source_icon: clip.source_icon.clone(),
@@ -136,6 +46,7 @@ fn clip_to_detail_item(clip: &Clip, full_image_content: Option<&[u8]>) -> Clipbo
         content: content_str,
         preview: clip.text_preview.clone(),
         folder_id: clip.folder_id.map(|id| id.to_string()),
+        is_pinned: clip.is_pinned,
         created_at: clip.created_at.to_rfc3339(),
         source_app: clip.source_app.clone(),
         source_icon: clip.source_icon.clone(),
@@ -197,6 +108,52 @@ async fn cleanup_all_clip_image_files(pool: &SqlitePool) -> Result<(), String> {
             crate::clipboard::remove_full_image_file(&path);
         }
     }
+
+    Ok(())
+}
+
+pub async fn enforce_clipboard_limits(
+    pool: &SqlitePool,
+    max_items: i64,
+    auto_delete_days: i64,
+) -> Result<(), String> {
+    // 1. Time-based expiration (auto_delete_days > 0)
+    // Non-folder clips older than auto_delete_days are deleted
+    if auto_delete_days > 0 {
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM clips
+            WHERE folder_id IS NULL AND is_deleted = 0
+              AND created_at < datetime('now', '-' || ? || ' days')
+            "#,
+        )
+        .bind(auto_delete_days)
+        .execute(pool)
+        .await;
+    }
+
+    // 2. Capacity limit (max_items > 0)
+    // Keep only the latest `max_items` unorganized/root clips
+    if max_items > 0 {
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM clips
+            WHERE folder_id IS NULL AND is_deleted = 0
+              AND id NOT IN (
+                  SELECT id FROM clips
+                  WHERE folder_id IS NULL AND is_deleted = 0
+                  ORDER BY created_at DESC
+                  LIMIT ?
+              )
+            "#,
+        )
+        .bind(max_items)
+        .execute(pool)
+        .await;
+    }
+
+    // 3. Clean up orphaned image files
+    let _ = cleanup_orphan_clip_image_files(pool).await;
 
     Ok(())
 }
@@ -348,7 +305,7 @@ pub async fn get_clips(
                 sqlx::query_as(
                     r#"
                     SELECT * FROM clips WHERE is_deleted = 0 AND folder_id = ?
-                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                    ORDER BY is_pinned DESC, created_at DESC LIMIT ? OFFSET ?
                 "#,
                 )
                 .bind(numeric_id)
@@ -367,7 +324,7 @@ pub async fn get_clips(
             sqlx::query_as(
                 r#"
                 SELECT * FROM clips WHERE is_deleted = 0
-                ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ORDER BY is_pinned DESC, created_at DESC LIMIT ? OFFSET ?
             "#,
             )
             .bind(limit)
@@ -551,9 +508,11 @@ pub async fn paste_clip(
                 }
             }
 
-            // Manually perform the LRU bump (update created_at)
+            // Manually perform the LRU bump (update created_at to now with subsecond precision)
+            let now = chrono::Utc::now();
             let _ =
-                sqlx::query(r#"UPDATE clips SET created_at = CURRENT_TIMESTAMP WHERE uuid = ?"#)
+                sqlx::query(r#"UPDATE clips SET created_at = ? WHERE uuid = ?"#)
+                    .bind(now)
                     .bind(&uuid)
                     .execute(pool)
                     .await;
@@ -571,6 +530,13 @@ pub async fn paste_clip(
                     String::from_utf8_lossy(&clip.content).to_string()
                 };
                 let _ = window.emit("clipboard-write", &content);
+                let _ = app.emit(
+                    "clipboard-change",
+                    &serde_json::json!({
+                        "id": uuid,
+                        "action": "paste"
+                    }),
+                );
 
                 // Check auto_paste setting
                 let manager = app.state::<Arc<SettingsManager>>();
@@ -595,6 +561,114 @@ pub async fn paste_clip(
                 }
             }
             final_res
+        }
+        None => Err("Clip not found".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn toggle_pin_clip(
+    id: String,
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<bool, String> {
+    let pool = &db.pool;
+    let clip: Option<Clip> = sqlx::query_as(r#"SELECT * FROM clips WHERE uuid = ?"#)
+        .bind(&id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match clip {
+        Some(c) => {
+            let new_pinned = !c.is_pinned;
+            sqlx::query(r#"UPDATE clips SET is_pinned = ? WHERE uuid = ?"#)
+                .bind(new_pinned)
+                .bind(&id)
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let _ = app.emit(
+                "clipboard-change",
+                &serde_json::json!({
+                    "id": id,
+                    "action": "pin",
+                    "is_pinned": new_pinned
+                }),
+            );
+
+            Ok(new_pinned)
+        }
+        None => Err("Clip not found".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn paste_plain_text(
+    id: String,
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<(), String> {
+    let pool = &db.pool;
+    let clip: Option<Clip> = sqlx::query_as(r#"SELECT * FROM clips WHERE uuid = ?"#)
+        .bind(&id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match clip {
+        Some(clip) => {
+            let _guard = crate::clipboard::CLIPBOARD_SYNC.lock().await;
+            if let Err(e) = stop_listening().await {
+                log::error!("Failed to stop listener: {}", e);
+            }
+
+            let text_content = if clip.clip_type == "text" || clip.clip_type == "html" || clip.clip_type == "rtf" {
+                let raw = String::from_utf8_lossy(&clip.content).to_string();
+                raw.trim().to_string()
+            } else {
+                clip.text_preview.trim().to_string()
+            };
+
+            crate::clipboard::set_ignore_hash(clip.content_hash.clone());
+            let _ = write_text(text_content).await;
+
+            let now = chrono::Utc::now();
+            let _ = sqlx::query(r#"UPDATE clips SET created_at = ? WHERE uuid = ?"#)
+                .bind(now)
+                .bind(&clip.uuid)
+                .execute(pool)
+                .await;
+
+            let app_clone = app.clone();
+            let _ = start_listening(app_clone).await;
+
+            let _ = window.emit("clipboard-write", &"[Plain Text]");
+            let _ = app.emit(
+                "clipboard-change",
+                &serde_json::json!({
+                    "id": clip.uuid,
+                    "action": "paste"
+                }),
+            );
+
+            let manager = app.state::<Arc<SettingsManager>>();
+            let settings = manager.get();
+            if settings.auto_paste {
+                crate::animate_window_hide(
+                    &window,
+                    Some(Box::new(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        crate::clipboard::send_paste_input();
+                    })),
+                );
+            } else {
+                crate::animate_window_hide(&window, None);
+            }
+
+            Ok(())
         }
         None => Err("Clip not found".to_string()),
     }
@@ -901,7 +975,8 @@ pub async fn get_folders(db: tauri::State<'_, Arc<Database>>) -> Result<Vec<Fold
 
 #[tauri::command]
 pub fn hide_window(window: tauri::WebviewWindow) -> Result<(), String> {
-    window.hide().map_err(|e| e.to_string())
+    crate::animate_window_hide(&window, None);
+    Ok(())
 }
 
 #[tauri::command]

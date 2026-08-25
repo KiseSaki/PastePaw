@@ -18,6 +18,7 @@ interface ClipListProps {
   onLoadMore: () => void;
   onDragStart: (clipId: string, startX: number, startY: number) => void;
   onCardContextMenu?: (e: React.MouseEvent, clipId: string) => void;
+  onTogglePin?: (clipId: string) => void;
 }
 
 export function ClipList({
@@ -32,6 +33,7 @@ export function ClipList({
   onLoadMore,
   onDragStart,
   onCardContextMenu,
+  onTogglePin,
 }: ClipListProps) {
   const { t } = useTranslation();
   const [gridApi, setGridApi] = useGridCallbackRef();
@@ -142,10 +144,12 @@ export function ClipList({
       <div data-el="clip-cell" data-clip-id={clip.id} style={style} className="flex h-full items-center justify-center">
         <ClipCard
           clip={clip}
-          isSelected={selectedClipId === clip.id}
+          index={columnIndex}
+          isSelected={selectedClipId ? selectedClipId === clip.id : columnIndex === 0}
           onSelect={() => onSelectClip(clip.id)}
           onPaste={() => onPaste(clip.id)}
           onCopy={() => onCopy(clip.id)}
+          onTogglePin={() => onTogglePin?.(clip.id)}
           onDragStart={onDragStart}
           onContextMenu={(e: React.MouseEvent) => onCardContextMenu?.(e, clip.id)}
         />

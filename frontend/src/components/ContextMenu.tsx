@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 interface ContextMenuProps {
   x: number;
@@ -14,6 +14,32 @@ interface ContextMenuProps {
 
 export function ContextMenu({ x, y, options, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: y, left: x });
+
+  useLayoutEffect(() => {
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      const margin = 8;
+      let newTop = y;
+      let newLeft = x;
+
+      // Flip upward if extending below viewport
+      if (y + rect.height > window.innerHeight - margin) {
+        newTop = y - rect.height;
+        // If flipping up also overflows top, clamp within window
+        if (newTop < margin) {
+          newTop = Math.max(margin, window.innerHeight - rect.height - margin);
+        }
+      }
+
+      // Clamp or shift left if extending beyond right edge
+      if (x + rect.width > window.innerWidth - margin) {
+        newLeft = Math.max(margin, window.innerWidth - rect.width - margin);
+      }
+
+      setPosition({ top: Math.max(margin, newTop), left: Math.max(margin, newLeft) });
+    }
+  }, [x, y, options]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -36,19 +62,13 @@ export function ContextMenu({ x, y, options, onClose }: ContextMenuProps) {
     };
   }, [onClose]);
 
-  // Adjust position if it flows off screen (basic)
-  const style = {
-    top: y,
-    left: x,
-  };
-
   return (
     <div
       ref={menuRef}
-      className="animate-in fade-in-0 zoom-in-95 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 fixed z-50 min-w-[12rem] overflow-hidden rounded-md border border-border bg-popover p-1 shadow-md"
-      style={style}
+      className="animate-in fade-in-0 zoom-in-95 fixed z-50 min-w-[12.5rem] max-h-[calc(100vh-16px)] overflow-y-auto no-scrollbar rounded-xl border border-border bg-popover/95 backdrop-blur-md p-1.5 shadow-2xl"
+      style={{ top: position.top, left: position.left }}
     >
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-0.5">
         {options.map((option, index) => (
           <button
             key={index}
@@ -57,7 +77,11 @@ export function ContextMenu({ x, y, options, onClose }: ContextMenuProps) {
               option.onClick();
               onClose();
             }}
-            className={`relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 ${option.danger ? 'text-red-500 focus:text-red-500' : 'text-popover-foreground'} `}
+            className={`relative flex cursor-pointer select-none items-center rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 ${
+              option.danger
+                ? 'text-red-400 hover:bg-red-500/10 hover:text-red-400'
+                : 'text-foreground'
+            }`}
           >
             {option.label}
           </button>

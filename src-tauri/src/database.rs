@@ -108,6 +108,20 @@ impl Database {
         )
         .await?;
 
+        add_column_if_missing(
+            &self.pool,
+            "ALTER TABLE clips ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0",
+        )
+        .await?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_clips_pinned ON clips(is_pinned);
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS clip_images (

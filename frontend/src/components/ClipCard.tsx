@@ -4,22 +4,24 @@ import { useMemo, memo, useState, forwardRef } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { LAYOUT, COLUMN_WIDTH, PREVIEW_CHAR_LIMIT } from '../constants';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Pin, Globe, FileCode, Palette } from 'lucide-react';
 import { useMotionValue, useMotionTemplate, motion } from 'framer-motion';
 
 interface ClipCardProps {
   clip: ClipboardItem;
+  index?: number;
   isSelected: boolean;
   onSelect: () => void;
   onPaste: () => void;
   onCopy: () => void;
+  onTogglePin?: () => void;
   onDragStart: (clipId: string, startX: number, startY: number) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 export const ClipCard = memo(
   forwardRef<HTMLDivElement, ClipCardProps>(function ClipCard(
-    { clip, isSelected, onSelect, onPaste, onCopy, onDragStart, onContextMenu }: ClipCardProps,
+    { clip, index, isSelected, onSelect, onPaste, onCopy, onTogglePin, onDragStart, onContextMenu }: ClipCardProps,
     ref
   ) {
     const { t } = useTranslation();
@@ -64,6 +66,31 @@ export const ClipCard = memo(
       return 0;
     }, [clip.clip_type, clip.metadata]);
 
+    // Smart content detection
+    const smartContent = useMemo(() => {
+      if (clip.clip_type === 'image') return null;
+      const text = clip.content.trim();
+      const hexMatch = text.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/i);
+      const rgbMatch = text.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/i);
+      if (hexMatch || rgbMatch) {
+        return { type: 'color' as const, color: text };
+      }
+      if (/^https?:\/\/[^\s]+$/i.test(text)) {
+        return { type: 'url' as const, url: text };
+      }
+      if (
+        (text.startsWith('{') && text.endsWith('}')) ||
+        (text.startsWith('[') && text.endsWith(']'))
+      ) {
+        try {
+          const parsed = JSON.parse(text);
+          const formatted = JSON.stringify(parsed, null, 2);
+          return { type: 'json' as const, formatted };
+        } catch {}
+      }
+      return null;
+    }, [clip.clip_type, clip.content]);
+
     // Memoize the content rendering
     const renderedContent = useMemo(() => {
       if (clip.clip_type === 'image') {
@@ -80,14 +107,57 @@ export const ClipCard = memo(
             )}
           </div>
         );
-      } else {
+      }
+
+      if (smartContent?.type === 'color') {
         return (
-          <pre className="whitespace-pre-wrap break-all font-mono text-[13px] leading-tight text-foreground">
-            <span>{clip.content.substring(0, PREVIEW_CHAR_LIMIT)}</span>
-          </pre>
+          <div className="flex h-full flex-col justify-center gap-2">
+            <div
+              className="h-16 w-full rounded-xl border border-black/10 shadow-inner flex items-center justify-center text-xs font-bold font-mono tracking-wider drop-shadow"
+              style={{ backgroundColor: smartContent.color }}
+            />
+            <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-foreground/90">
+              <Palette size={13} className="text-muted-foreground" />
+              <span>{smartContent.color}</span>
+            </div>
+          </div>
         );
       }
-    }, [clip.clip_type, clip.content, imageSrc]);
+
+      if (smartContent?.type === 'url') {
+        return (
+          <div className="flex h-full flex-col gap-1.5">
+            <div className="flex items-center gap-1 text-[11px] font-semibold text-sky-500">
+              <Globe size={13} />
+              <span>URL</span>
+            </div>
+            <pre className="whitespace-pre-wrap break-all font-mono text-[13px] leading-tight text-foreground underline decoration-sky-400/30">
+              <span>{clip.content.substring(0, PREVIEW_CHAR_LIMIT)}</span>
+            </pre>
+          </div>
+        );
+      }
+
+      if (smartContent?.type === 'json') {
+        return (
+          <div className="flex h-full flex-col gap-1">
+            <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-500">
+              <FileCode size={13} />
+              <span>JSON</span>
+            </div>
+            <pre className="whitespace-pre-wrap break-all font-mono text-[12px] leading-tight text-foreground/90">
+              <span>{smartContent.formatted.substring(0, PREVIEW_CHAR_LIMIT)}</span>
+            </pre>
+          </div>
+        );
+      }
+
+      return (
+        <pre className="whitespace-pre-wrap break-all font-mono text-[13px] leading-tight text-foreground">
+          <span>{clip.content.substring(0, PREVIEW_CHAR_LIMIT)}</span>
+        </pre>
+      );
+    }, [clip.clip_type, clip.content, imageSrc, smartContent]);
 
     // Generate stable color index based on source app name
     const getAppColorIndex = (name: string) => {
@@ -187,6 +257,42 @@ export const ClipCard = memo(
             <span className="flex-1 truncate text-[11px] font-bold uppercase tracking-wider text-foreground">
               {title}
             </span>
+
+            {/* Quick number shortcut badge (1-9) */}
+            {index !== undefined && index < 9 && (
+              <span
+                data-el="clip-card-shortcut-badge"
+                className="rounded bg-black/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white/90 shadow-sm"
+                title={`Press ${index + 1} to paste`}
+              >
+                {index + 1}
+              </span>
+            )}
+
+            {/* Pin Toggle Button */}
+            <button
+              data-el="clip-card-pin-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePin?.();
+              }}
+              className={clsx(
+                'rounded-md p-1 transition-all hover:bg-black/10',
+                clip.is_pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              )}
+              title={clip.is_pinned ? t('contextMenu.unpin') : t('contextMenu.pin')}
+            >
+              <Pin
+                size={14}
+                className={clsx(
+                  'transition-transform',
+                  clip.is_pinned
+                    ? 'fill-amber-400 text-amber-500 rotate-45'
+                    : 'text-foreground/70 hover:text-foreground'
+                )}
+              />
+            </button>
+
             <button
               data-el="clip-card-copy-btn"
               onClick={(e) => {

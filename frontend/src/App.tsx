@@ -1,15 +1,14 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { ClipboardItem as AppClipboardItem, FolderItem, Settings } from './types';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { ClipboardItem as AppClipboardItem, FolderItem, Settings, SortMode } from './types';
 import { ClipList } from './components/ClipList';
 import { ControlBar } from './components/ControlBar';
 import { DragPreview } from './components/DragPreview';
 import { ContextMenu } from './components/ContextMenu';
 import { FolderModal } from './components/FolderModal';
-import { AiResultDialog } from './components/AiResultDialog';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useTheme } from './hooks/useTheme';
 import { useLanguage } from './hooks/useLanguage';
@@ -48,6 +47,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>('time_desc');
   const [clipListResetToken, setClipListResetToken] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
@@ -75,7 +75,6 @@ function App() {
   useLanguage(settings?.language);
   const { t } = useTranslation();
 
-  const appWindow = getCurrentWindow();
   const selectedFolderRef = useRef(selectedFolder);
   selectedFolderRef.current = selectedFolder;
   const loadPerfIdRef = useRef(0);
@@ -401,11 +400,30 @@ function App() {
     };
   }, [refreshCurrentFolder, loadFolders, refreshTotalCount]);
 
+  useEffect(() => {
+    const unlistenShow = listen('window-show', () => {
+      setSelectedClipId(null);
+      setSearchQuery('');
+      setShowSearch(false);
+      setClipListResetToken((prev) => prev + 1);
+      loadClips(selectedFolderRef.current, false, '');
+      loadFolders();
+      refreshTotalCount();
+    });
+
+    return () => {
+      unlistenShow.then((unlisten) => {
+        if (typeof unlisten === 'function') unlisten();
+      });
+    };
+  }, [loadClips, loadFolders, refreshTotalCount]);
+
   const handleDelete = async (clipId: string | null) => {
-    if (!clipId) return;
+    const targetId = clipId || (clips.length > 0 ? clips[0].id : null);
+    if (!targetId) return;
     try {
-      await invoke('delete_clip', { id: clipId, hardDelete: false });
-      setClips(clips.filter((c) => c.id !== clipId));
+      await invoke('delete_clip', { id: targetId, hardDelete: false });
+      setClips(clips.filter((c) => c.id !== targetId));
       setSelectedClipId(null);
       // Refresh counts
       loadFolders();
@@ -426,6 +444,31 @@ function App() {
     []
   );
 
+  const sortedClips = useMemo(() => {
+    return [...clips].sort((a, b) => {
+      // Pinned clips always stay at the very top
+      const pinA = a.is_pinned ? 1 : 0;
+      const pinB = b.is_pinned ? 1 : 0;
+      if (pinA !== pinB) {
+        return pinB - pinA;
+      }
+
+      switch (sortMode) {
+        case 'time_asc':
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case 'app':
+          return (a.source_app || '').localeCompare(b.source_app || '');
+        case 'type':
+          return a.clip_type.localeCompare(b.clip_type);
+        case 'length':
+          return (b.content?.length || 0) - (a.content?.length || 0);
+        case 'time_desc':
+        default:
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
+  }, [clips, sortMode]);
+
   const handlePaste = async (clipId: string) => {
     try {
       const clip = clips.find((c) => c.id === clipId);
@@ -441,6 +484,14 @@ function App() {
       invoke('paste_clip', { id: clipId }).catch(console.error);
     } catch (error) {
       console.error('Failed to paste clip:', error);
+    }
+  };
+
+  const handlePastePlainText = async (clipId: string) => {
+    try {
+      await invoke('paste_plain_text', { id: clipId });
+    } catch (e) {
+      console.error('Failed to paste plain text:', e);
     }
   };
 
@@ -461,50 +512,94 @@ function App() {
     }
   };
 
-  // Keyboard navigation handlers
+  const handleCopyPlainText = async (clip: AppClipboardItem) => {
+    try {
+      let text = clip.content;
+      if (clip.clip_type === 'image') {
+        text = clip.preview;
+      }
+      await navigator.clipboard.writeText(text.trim());
+      toast.success(t('common.copied'));
+    } catch (error) {
+      console.error('Failed to copy plain text:', error);
+    }
+  };
+
+  const handleTogglePin = async (clipId: string) => {
+    try {
+      const isPinned = await invoke<boolean>('toggle_pin_clip', { id: clipId });
+      setClips((prev) =>
+        prev.map((c) => (c.id === clipId ? { ...c, is_pinned: isPinned } : c))
+      );
+      toast.success(isPinned ? t('contextMenu.pin') : t('contextMenu.unpin'));
+    } catch (e) {
+      console.error('Failed to toggle pin:', e);
+    }
+  };
+
+  // Keyboard navigation handlers using sortedClips
   const handleNavigateLeft = useCallback(() => {
-    if (clips.length === 0) return;
+    if (sortedClips.length === 0) return;
 
     if (!selectedClipId) {
-      // No selection, select the first clip
-      setSelectedClipId(clips[0].id);
+      setSelectedClipId(sortedClips[0].id);
       return;
     }
 
-    const currentIndex = clips.findIndex((c) => c.id === selectedClipId);
+    const currentIndex = sortedClips.findIndex((c) => c.id === selectedClipId);
     if (currentIndex > 0) {
-      setSelectedClipId(clips[currentIndex - 1].id);
+      setSelectedClipId(sortedClips[currentIndex - 1].id);
+    } else {
+      setSelectedClipId(sortedClips[0].id);
     }
-  }, [clips, selectedClipId]);
+  }, [sortedClips, selectedClipId]);
 
   const handleNavigateRight = useCallback(() => {
-    if (clips.length === 0) return;
+    if (sortedClips.length === 0) return;
 
     if (!selectedClipId) {
-      // No selection, select the first clip
-      setSelectedClipId(clips[0].id);
+      if (sortedClips.length > 1) {
+        setSelectedClipId(sortedClips[1].id);
+      } else {
+        setSelectedClipId(sortedClips[0].id);
+      }
       return;
     }
 
-    const currentIndex = clips.findIndex((c) => c.id === selectedClipId);
-    if (currentIndex < clips.length - 1) {
-      setSelectedClipId(clips[currentIndex + 1].id);
+    const currentIndex = sortedClips.findIndex((c) => c.id === selectedClipId);
+    if (currentIndex >= 0 && currentIndex < sortedClips.length - 1) {
+      setSelectedClipId(sortedClips[currentIndex + 1].id);
     }
-  }, [clips, selectedClipId]);
+  }, [sortedClips, selectedClipId]);
 
   const handlePasteSelected = useCallback(() => {
     if (selectedClipId) {
       handlePaste(selectedClipId);
+    } else if (sortedClips.length > 0) {
+      handlePaste(sortedClips[0].id);
     }
-  }, [selectedClipId, handlePaste]);
+  }, [selectedClipId, sortedClips, handlePaste]);
 
   useKeyboard({
-    onClose: () => appWindow.hide(),
+    onClose: () => invoke('hide_window'),
     onSearch: () => setShowSearch(true),
     onDelete: () => handleDelete(selectedClipId),
+    onPin: () => {
+      const targetId = selectedClipId || (sortedClips.length > 0 ? sortedClips[0].id : null);
+      if (targetId) handleTogglePin(targetId);
+    },
     onNavigateLeft: handleNavigateLeft,
     onNavigateRight: handleNavigateRight,
     onPaste: handlePasteSelected,
+    onPastePlainText: () => {
+      const targetId = selectedClipId || (sortedClips.length > 0 ? sortedClips[0].id : null);
+      if (targetId) handlePastePlainText(targetId);
+    },
+    onQuickPaste: (index: number) => {
+      if (index >= 0 && index < sortedClips.length) {
+        handlePaste(sortedClips[index].id);
+      }
+    },
   });
 
   const handleCreateFolder = async (name: string) => {
@@ -513,6 +608,41 @@ function App() {
       await loadFolders();
     } catch (error) {
       console.error('Failed to create folder:', error);
+    }
+  };
+
+  const handleRenameFolder = async (folderId: string, name: string) => {
+    try {
+      await invoke('rename_folder', { id: folderId, name });
+      await loadFolders();
+    } catch (error) {
+      console.error('Failed to rename folder:', error);
+    }
+  };
+
+  const handleCreateOrRenameFolder = async (name: string) => {
+    if (folderModalMode === 'create') {
+      await handleCreateFolder(name);
+    } else if (folderModalMode === 'rename' && editingFolderId) {
+      await handleRenameFolder(editingFolderId, name);
+    }
+    setShowAddFolderModal(false);
+    setNewFolderName('');
+    setEditingFolderId(null);
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    try {
+      await invoke('delete_folder', { id: folderId });
+      toast.success(t('folders.folderDeleted'));
+      if (selectedFolder === folderId) {
+        setSelectedFolder(null);
+      }
+      await loadFolders();
+      await loadClips(null);
+    } catch (error) {
+      console.error('Failed to delete folder:', error);
+      toast.error(t('notifications.folderDeleteFailed'));
     }
   };
 
@@ -557,30 +687,6 @@ function App() {
   const [folderModalMode, setFolderModalMode] = useState<'create' | 'rename'>('create');
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
 
-  // AI Result State
-  const [aiResult, setAiResult] = useState({
-    isOpen: false,
-    title: '',
-    content: '',
-  });
-
-  const handleAiAction = async (clipId: string, action: string, title: string) => {
-    try {
-      const toastId = toast.loading(t('ai.processing'));
-      const result = await invoke<string>('ai_process_clip', { clipId, action });
-      toast.dismiss(toastId);
-      setAiResult({
-        isOpen: true,
-        title,
-        content: result,
-      });
-    } catch (error) {
-      toast.dismiss();
-      console.error('AI Processing Failed:', error);
-      toast.error(t('ai.error', { error: String(error) }));
-    }
-  };
-
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, type: 'card' | 'folder', itemId: string) => {
       e.preventDefault();
@@ -597,43 +703,6 @@ function App() {
   const handleCloseContextMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
-
-  // Updated Create Folder to handle Rename
-  const handleCreateOrRenameFolder = async (name: string) => {
-    if (folderModalMode === 'create') {
-      await handleCreateFolder(name);
-      toast.success(t('folders.folderCreated', { name }));
-      setShowAddFolderModal(false);
-      setNewFolderName('');
-    } else if (folderModalMode === 'rename' && editingFolderId) {
-      try {
-        await invoke('rename_folder', { id: editingFolderId, name });
-        await loadFolders();
-        toast.success(t('folders.folderRenamed', { name }));
-        setShowAddFolderModal(false);
-        setNewFolderName('');
-      } catch (error) {
-        console.error('Failed to rename folder:', error);
-        toast.error(t('notifications.folderRenameFailed'));
-      }
-    }
-  };
-
-  const handleDeleteFolder = async (folderId: string) => {
-    if (!folderId) return;
-    try {
-      await invoke('delete_folder', { id: folderId });
-      if (selectedFolder === folderId) {
-        setSelectedFolder(null);
-      }
-      await loadFolders();
-      refreshTotalCount();
-      toast.success(t('folders.folderDeleted'));
-    } catch (error) {
-      console.error('Failed to delete folder:', error);
-      toast.error(t('notifications.folderDeleteFailed'));
-    }
-  };
 
   return (
     <div data-el="app-root" className="relative h-screen w-full overflow-hidden">
@@ -659,39 +728,9 @@ function App() {
               y={contextMenu.y}
               onClose={handleCloseContextMenu}
               options={
-                contextMenu.type === 'card'
-                  ? [
-                      {
-                        label: `${settings?.ai_title_summarize || t('contextMenu.summarize')}`,
-                        onClick: () =>
-                          handleAiAction(contextMenu.itemId, 'summarize', t('ai.summary')),
-                      },
-                      {
-                        label: `${settings?.ai_title_translate || t('contextMenu.translate')}`,
-                        onClick: () =>
-                          handleAiAction(contextMenu.itemId, 'translate', t('ai.translation')),
-                      },
-                      {
-                        label: `${settings?.ai_title_explain_code || t('contextMenu.explainCode')}`,
-                        onClick: () =>
-                          handleAiAction(
-                            contextMenu.itemId,
-                            'explain_code',
-                            t('ai.codeExplanation')
-                          ),
-                      },
-                      {
-                        label: `${settings?.ai_title_fix_grammar || t('contextMenu.fixGrammar')}`,
-                        onClick: () =>
-                          handleAiAction(contextMenu.itemId, 'fix_grammar', t('ai.grammarCheck')),
-                      },
-                      {
-                        label: t('contextMenu.delete'),
-                        danger: true,
-                        onClick: () => handleDelete(contextMenu.itemId),
-                      },
-                    ]
-                  : [
+                (() => {
+                  if (contextMenu.type === 'folder') {
+                    return [
                       {
                         label: t('contextMenu.rename'),
                         onClick: () => {
@@ -707,7 +746,80 @@ function App() {
                         danger: true,
                         onClick: () => handleDeleteFolder(contextMenu.itemId),
                       },
-                    ]
+                    ];
+                  }
+
+                  const targetClip = clips.find((c) => c.id === contextMenu.itemId);
+                  const menuOptions: { label: string; onClick: () => void; danger?: boolean }[] = [];
+
+                  if (targetClip) {
+                    const text = targetClip.content.trim();
+
+                    // Smart Action: Open URL
+                    if (/^https?:\/\/[^\s]+$/i.test(text)) {
+                      menuOptions.push({
+                        label: t('contextMenu.openUrl'),
+                        onClick: () => openUrl(text),
+                      });
+                    }
+
+                    // Smart Action: Format JSON
+                    if (
+                      (text.startsWith('{') && text.endsWith('}')) ||
+                      (text.startsWith('[') && text.endsWith(']'))
+                    ) {
+                      try {
+                        const parsed = JSON.parse(text);
+                        const formatted = JSON.stringify(parsed, null, 2);
+                        menuOptions.push({
+                          label: t('contextMenu.formatJson'),
+                          onClick: async () => {
+                            await navigator.clipboard.writeText(formatted);
+                            toast.success(t('common.copied'));
+                          },
+                        });
+                      } catch {}
+                    }
+
+                    // Smart Action: Copy Color HEX
+                    const hexMatch = text.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/i);
+                    if (hexMatch) {
+                      menuOptions.push({
+                        label: t('contextMenu.copyColorHex'),
+                        onClick: async () => {
+                          await navigator.clipboard.writeText(text);
+                          toast.success(t('common.copied'));
+                        },
+                      });
+                    }
+
+                    // Pin / Unpin
+                    menuOptions.push({
+                      label: targetClip.is_pinned ? t('contextMenu.unpin') : t('contextMenu.pin'),
+                      onClick: () => handleTogglePin(targetClip.id),
+                    });
+
+                    // Plain text actions
+                    if (targetClip.clip_type !== 'image') {
+                      menuOptions.push({
+                        label: t('contextMenu.pastePlainText'),
+                        onClick: () => handlePastePlainText(targetClip.id),
+                      });
+                      menuOptions.push({
+                        label: t('contextMenu.copyPlainText'),
+                        onClick: () => handleCopyPlainText(targetClip),
+                      });
+                    }
+                  }
+
+                  menuOptions.push({
+                    label: t('contextMenu.delete'),
+                    danger: true,
+                    onClick: () => handleDelete(contextMenu.itemId),
+                  });
+
+                  return menuOptions;
+                })()
               }
             />
           )}
@@ -717,6 +829,8 @@ function App() {
             folders={folders}
             selectedFolder={selectedFolder}
             onSelectFolder={handleSelectFolder}
+            sortMode={sortMode}
+            onSortChange={setSortMode}
             showSearch={showSearch}
             searchQuery={searchQuery}
             onSearchChange={handleSearch}
@@ -747,7 +861,7 @@ function App() {
 
           <main data-el="clip-list-area" className="no-scrollbar relative flex-1 overflow-hidden">
             <ClipList
-              clips={clips}
+              clips={sortedClips}
               isLoading={isLoading}
               hasMore={hasMore}
               resetToken={clipListResetToken}
@@ -760,6 +874,7 @@ function App() {
               // Simulated Drag Props
               onDragStart={startDrag}
               onCardContextMenu={(e, clipId) => handleContextMenu(e, 'card', clipId)}
+              onTogglePin={handleTogglePin}
             />
 
             {/* Add/Rename Folder Modal Overlay */}
@@ -772,13 +887,6 @@ function App() {
                 setNewFolderName('');
               }}
               onSubmit={handleCreateOrRenameFolder}
-            />
-
-            <AiResultDialog
-              isOpen={aiResult.isOpen}
-              title={aiResult.title}
-              content={aiResult.content}
-              onClose={() => setAiResult((prev) => ({ ...prev, isOpen: false }))}
             />
           </main>
           <Toaster richColors position="bottom-center" theme={effectiveTheme} />

@@ -1,9 +1,12 @@
+export type SortMode = 'time_desc' | 'time_asc' | 'app' | 'type' | 'length';
+
 export interface ClipboardItem {
   id: string;
   clip_type: string;
   content: string;
   preview: string;
   folder_id: string | null;
+  is_pinned?: boolean;
   created_at: string;
   source_app: string | null;
   source_icon: string | null;
@@ -32,18 +35,6 @@ export interface Settings {
   float_above_taskbar?: boolean;
   auto_paste: boolean;
   ignore_ghost_clips: boolean;
-  ai_provider?: string;
-  ai_api_key?: string;
-  ai_model?: string;
-  ai_base_url?: string;
-  ai_prompt_summarize?: string;
-  ai_prompt_translate?: string;
-  ai_prompt_explain_code?: string;
-  ai_prompt_fix_grammar?: string;
-  ai_title_summarize?: string;
-  ai_title_translate?: string;
-  ai_title_explain_code?: string;
-  ai_title_fix_grammar?: string;
 }
 
 export type ClipType = 'text' | 'image' | 'html' | 'rtf' | 'file' | 'url';
