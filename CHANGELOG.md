@@ -2,6 +2,18 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.2
+
+### Fixed
+- Fixed notepad window background transparency leak where desktop background remained visible regardless of opacity slider level
+- Fixed notepad color theme backgrounds to properly render solid pastel tints over a solid base layer
+- Clarified notepad window opacity terminology in Chinese locale ("窗口不透明度")
+
+### 修复
+- 修复便签窗口背景漏光穿透问题：解决无论透明度拉到 30% 还是 100% 均能透过窗口看到底层桌面或应用程序的 Bug
+- 优化便签主题色彩渲染层级：确保便签淡雅色调在实体基底背景上正确融合呈现，100% 不透明度下完全实心不透光
+- 优化便签窗口不透明度文案：统一中文语言下为“窗口不透明度”，消除 100% 极值认知歧义
+
 ## v1.4.1
 
 ### Added
