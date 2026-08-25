@@ -21,8 +21,29 @@ import {
   Menu,
   StickyNote,
   Clock,
+  Bold as BoldIcon,
+  Strikethrough as StrikeIcon,
+  Code as CodeIcon,
+  List as ListIcon,
+  ListOrdered as OrderedListIcon,
+  CheckSquare as TaskIcon,
+  Heading1,
+  Heading2,
+  Minus as DividerIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import Placeholder from '@tiptap/extension-placeholder';
+import Link from '@tiptap/extension-link';
+import { BubbleMenu } from '@tiptap/react/menus';
+import {
+  htmlToMarkdown,
+  ensureHtmlContent,
+  extractPlainTextPreview,
+} from '../utils/notepadMarkdown';
 
 export function NotepadWindow() {
   const { t } = useTranslation();
@@ -60,7 +81,74 @@ export function NotepadWindow() {
   const activeNoteRef = useRef<NoteItem | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const opacityRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Debounced auto-save
+  const triggerAutoSave = useCallback((newTitle: string, newContent: string, newColor: string) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    setIsSaving(true);
+    saveTimeoutRef.current = setTimeout(async () => {
+      const currentId = activeNoteRef.current?.id;
+      if (!currentId) {
+        setIsSaving(false);
+        return;
+      }
+
+      try {
+        const updated = await invoke<NoteItem>('update_note', {
+          id: currentId,
+          title: newTitle.trim() || null,
+          content: newContent,
+          color: newColor,
+        });
+        activeNoteRef.current = updated;
+        setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+      } catch (err) {
+        console.error('Failed to auto-save note:', err);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 300);
+  }, []);
+
+  // Tiptap Editor Instance
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+        bulletList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
+        orderedList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
+      }),
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
+      Placeholder.configure({
+        placeholder: '输入便签内容，支持 Markdown (如 - 列表, [] 待办, **加粗**)...',
+      }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        defaultProtocol: 'https',
+      }),
+    ],
+    content: ensureHtmlContent(content),
+    onUpdate: ({ editor: currentEditor }) => {
+      const html = currentEditor.getHTML();
+      setContent(html);
+      triggerAutoSave(title, html, color);
+    },
+  });
 
   // Load Settings and initial Always on Top
   useEffect(() => {
@@ -99,6 +187,42 @@ export function NotepadWindow() {
     }
   }, []);
 
+  // Select note
+  const selectNote = useCallback(
+    (note: NoteItem) => {
+      activeNoteRef.current = note;
+      setSelectedNoteId(note.id);
+      setTitle(note.title);
+      setContent(note.content);
+      setColor(note.color || 'default');
+      setIsPinned(note.is_pinned);
+      if (editor && !editor.isDestroyed) {
+        editor.commands.setContent(ensureHtmlContent(note.content));
+      }
+    },
+    [editor]
+  );
+
+  // Create new note
+  const handleCreateNote = useCallback(async () => {
+    try {
+      const newNote = await invoke<NoteItem>('create_note', {
+        title: null,
+        content: '',
+        color: 'default',
+      });
+      setNotes((prev) => [newNote, ...prev]);
+      selectNote(newNote);
+      if (editor && !editor.isDestroyed) {
+        editor.commands.clearContent(true);
+        editor.commands.focus();
+      }
+    } catch (err) {
+      console.error('Failed to create note:', err);
+      toast.error(t('notepad.createFailed'));
+    }
+  }, [editor, selectNote, t]);
+
   useEffect(() => {
     loadNotes(searchQuery).then((loadedNotes) => {
       const urlParams = new URLSearchParams(window.location.search);
@@ -112,7 +236,7 @@ export function NotepadWindow() {
         handleCreateNote();
       }
     });
-  }, [loadNotes, searchQuery]);
+  }, [loadNotes, searchQuery, selectNote, handleCreateNote]);
 
   // Listen for backend / multi-window note change events
   useEffect(() => {
@@ -131,55 +255,7 @@ export function NotepadWindow() {
       unlistenNotes.then((f) => f());
       unlistenSelect.then((f) => f());
     };
-  }, [loadNotes, searchQuery]);
-
-  // Select note
-  const selectNote = (note: NoteItem) => {
-    activeNoteRef.current = note;
-    setSelectedNoteId(note.id);
-    setTitle(note.title);
-    setContent(note.content);
-    setColor(note.color || 'default');
-    setIsPinned(note.is_pinned);
-  };
-
-  // Debounced auto-save
-  const triggerAutoSave = useCallback((newTitle: string, newContent: string, newColor: string) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    setIsSaving(true);
-    saveTimeoutRef.current = setTimeout(async () => {
-      const currentId = activeNoteRef.current?.id;
-      if (!currentId) {
-        setIsSaving(false);
-        return;
-      }
-
-      try {
-        const updated = await invoke<NoteItem>('update_note', {
-          id: currentId,
-          title: newTitle.trim() || null,
-          content: newContent,
-          color: newColor,
-        });
-        activeNoteRef.current = updated;
-        setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
-      } catch (err) {
-        console.error('Failed to auto-save note:', err);
-      } finally {
-        setIsSaving(false);
-      }
-    }, 300);
-  }, []);
-
-  // Content change
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newContent = e.target.value;
-    setContent(newContent);
-    triggerAutoSave(title, newContent, color);
-  };
+  }, [loadNotes, searchQuery, selectNote]);
 
   // Title change
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -192,23 +268,6 @@ export function NotepadWindow() {
   const handleColorChange = (newColor: string) => {
     setColor(newColor);
     triggerAutoSave(title, content, newColor);
-  };
-
-  // Create new note
-  const handleCreateNote = async () => {
-    try {
-      const newNote = await invoke<NoteItem>('create_note', {
-        title: null,
-        content: '',
-        color: 'default',
-      });
-      setNotes((prev) => [newNote, ...prev]);
-      selectNote(newNote);
-      textareaRef.current?.focus();
-    } catch (err) {
-      console.error('Failed to create note:', err);
-      toast.error(t('notepad.createFailed'));
-    }
   };
 
   // Delete note
@@ -249,28 +308,30 @@ export function NotepadWindow() {
     }
   };
 
-  // Copy full note
+  // Copy full note (serialized as Markdown)
   const handleCopyAll = async () => {
-    if (!content) {
+    const md = htmlToMarkdown(content);
+    if (!md) {
       toast.info(t('notepad.emptyNote'));
       return;
     }
     try {
-      await navigator.clipboard.writeText(content);
+      await navigator.clipboard.writeText(md);
       toast.success(t('notepad.copiedToClipboard'));
     } catch (err) {
       console.error('Failed to copy note:', err);
     }
   };
 
-  // Paste to application
+  // Paste to application (serialized as Markdown)
   const handlePasteToApp = async () => {
-    if (!content) {
+    const md = htmlToMarkdown(content);
+    if (!md) {
       toast.info(t('notepad.emptyNote'));
       return;
     }
     try {
-      await invoke('paste_note', { content });
+      await invoke('paste_note', { content: md });
     } catch (err) {
       console.error('Failed to paste note:', err);
     }
@@ -310,77 +371,50 @@ export function NotepadWindow() {
     }
   };
 
-  // Resizable Divider Drag Handler
+  // Mouse Drag Resizing handler for Divider
   const startResizing = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
+
     const startX = e.clientX;
-    const startW = sidebarWidthRef.current;
+    const startWidth = sidebarWidthRef.current;
 
-    const onMouseMove = (moveEvent: MouseEvent) => {
+    const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - startX;
-      const maxAllowed = Math.min(420, Math.floor(window.innerWidth * 0.65));
-      let newW = startW + delta;
+      let newWidth = startWidth + delta;
 
-      if (newW < 48) {
-        setIsSidebarOpen(false);
+      // Snapping: if dragged very small, collapse to 0
+      if (newWidth < 48) {
+        if (newWidth < 30) {
+          setIsSidebarOpen(false);
+        }
+        newWidth = 48;
       } else {
         setIsSidebarOpen(true);
-        newW = Math.max(48, Math.min(newW, maxAllowed));
-        setSidebarWidth(newW);
-        localStorage.setItem('pastepaw_notepad_sidebar_width', String(newW));
       }
+
+      // Clamp max width
+      const maxWidth = Math.min(420, Math.floor(window.innerWidth * 0.65));
+      if (newWidth > maxWidth) newWidth = maxWidth;
+
+      setSidebarWidth(newWidth);
     };
 
-    const onMouseUp = () => {
+    const handleMouseUp = () => {
       setIsResizing(false);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      localStorage.setItem(
+        'pastepaw_notepad_sidebar_width',
+        String(Math.round(sidebarWidthRef.current))
+      );
     };
 
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
   }, []);
 
-  // Keyboard Shortcuts inside window
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+N: New Note
-      if (e.ctrlKey && e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        handleCreateNote();
-        return;
-      }
-
-      // Ctrl+Enter: Paste to App
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        handlePasteToApp();
-        return;
-      }
-
-      // Ctrl+Shift+C: Copy All
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        handleCopyAll();
-        return;
-      }
-
-      // Escape: Close
-      if (e.key === 'Escape' && !showOpacitySlider) {
-        handleClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [content, selectedNoteId, showOpacitySlider]);
-
-  // Click outside opacity dropdown
+  // Close opacity dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (opacityRef.current && !opacityRef.current.contains(e.target as Node)) {
@@ -390,163 +424,195 @@ export function NotepadWindow() {
     if (showOpacitySlider) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [showOpacitySlider]);
 
-  // Calculate word & char count
-  const charCount = content.length;
-  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+  // Keyboard Shortcuts inside Notepad Window
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+N: New Note
+      if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleCreateNote();
+      }
+      // Ctrl+Shift+C: Copy All
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCopyAll();
+      }
+      // Ctrl+Enter: Paste to app
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        handlePasteToApp();
+      }
+      // Escape: Close window
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [content, handleCreateNote]);
 
   const currentColorObj = NOTE_COLORS.find((c) => c.id === color) || NOTE_COLORS[0];
+  const plainText = extractPlainTextPreview(content, 999999);
+  const charCount = plainText.length;
+  const wordCount = plainText.trim() ? plainText.trim().split(/\s+/).length : 0;
 
-  // Sidebar responsive modes
-  const isStandard = sidebarWidth >= 165;
-  const isCompact = sidebarWidth >= 100 && sidebarWidth < 165;
-  const isMini = sidebarWidth < 100;
+  // Sidebar display mode tiers
+  const isMini = isSidebarOpen && sidebarWidth < 100;
+  const isCompact = isSidebarOpen && sidebarWidth >= 100 && sidebarWidth < 165;
 
   return (
     <div
       className={clsx(
-        'relative flex h-screen w-screen select-none flex-col overflow-hidden rounded-lg border border-border/70 text-foreground shadow-2xl transition-opacity duration-150',
-        effectiveTheme === 'dark'
-          ? 'bg-neutral-900/95 backdrop-blur-xl'
-          : 'bg-white/95 backdrop-blur-xl'
+        'relative flex h-screen w-screen select-none flex-col overflow-hidden border border-border/80 text-foreground shadow-2xl transition-all',
+        currentColorObj.bg
       )}
-      style={{ opacity: opacity / 100 }}
+      style={{
+        opacity: opacity / 100,
+      }}
     >
-      {/* Custom Title Bar / Header - Layered with z-30 to prevent popover being covered */}
-      <header
-        data-tauri-drag-region
-        className="relative z-30 flex h-11 shrink-0 cursor-move items-center justify-between border-b border-border/50 bg-muted/40 px-3 backdrop-blur-md"
-      >
-        <div className="pointer-events-none flex items-center gap-2">
-          <StickyNote size={17} className="text-amber-500" />
-          <span className="text-xs font-semibold tracking-wide text-foreground/90">
-            {t('notepad.title')}
-          </span>
-          {isSaving && (
-            <span className="ml-1 animate-pulse text-[10px] text-muted-foreground">Saving...</span>
-          )}
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-1">
-          {/* Toggle Sidebar */}
+      {/* Top Header / Drag Titlebar - relative z-30 ensures popovers float above main content */}
+      <header className="relative z-30 flex h-9 shrink-0 items-center justify-between border-b border-border/40 bg-background/50 px-3 backdrop-blur-md">
+        {/* Left window drag zone */}
+        <div data-tauri-drag-region className="drag-area flex flex-1 items-center gap-2">
           <button
             onClick={handleToggleSidebar}
-            title={t('notepad.sidebar')}
-            className={clsx(
-              'flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
-              isSidebarOpen && 'bg-accent/60 text-foreground'
-            )}
+            title={t('notepad.toggleSidebar')}
+            className="no-drag flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Menu size={14} />
           </button>
 
-          {/* Opacity Menu */}
+          <span className="flex items-center gap-1 text-xs font-bold tracking-tight text-foreground/90">
+            <StickyNote size={14} className="text-amber-500" />
+            <span>PastePaw 便签</span>
+          </span>
+
+          {isSaving && (
+            <span className="animate-pulse text-[10px] text-muted-foreground">
+              {t('notepad.saving')}
+            </span>
+          )}
+        </div>
+
+        {/* Right Top Controls */}
+        <div className="no-drag flex items-center gap-1">
+          {/* Opacity Control */}
           <div className="relative" ref={opacityRef}>
             <button
               onClick={() => setShowOpacitySlider(!showOpacitySlider)}
               title={t('notepad.opacity')}
               className={clsx(
-                'flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
-                showOpacitySlider && 'bg-accent/60 text-foreground'
+                'flex h-6 w-6 items-center justify-center rounded transition-colors',
+                showOpacitySlider
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
               )}
             >
-              <Sliders size={14} />
+              <Sliders size={13} />
             </button>
 
             {showOpacitySlider && (
-              <div className="animate-in fade-in-0 zoom-in-95 bg-card/98 dark:bg-neutral-900/98 absolute right-0 top-9 z-50 flex w-44 flex-col gap-2 rounded-xl border border-border/80 p-3 shadow-2xl backdrop-blur-2xl">
-                <div className="flex justify-between text-xs font-medium">
-                  <span className="text-muted-foreground">{t('notepad.opacity')}</span>
-                  <span className="font-mono">{opacity}%</span>
+              <div className="bg-card/98 dark:bg-neutral-900/98 animate-in fade-in zoom-in-95 absolute right-0 top-8 z-50 flex w-44 flex-col gap-2 rounded-xl border border-border/80 p-3 shadow-2xl backdrop-blur-2xl duration-100">
+                <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                  <span>{t('notepad.opacity')}</span>
+                  <span className="font-mono text-amber-500">{opacity}%</span>
                 </div>
                 <input
                   type="range"
-                  min="40"
+                  min="30"
                   max="100"
-                  step="2"
                   value={opacity}
                   onChange={(e) => setOpacity(Number(e.target.value))}
-                  className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-secondary accent-amber-500"
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-amber-500"
                 />
               </div>
             )}
           </div>
 
-          {/* Pin Always on Top Toggle */}
+          {/* Always on top toggle */}
           <button
             onClick={handleToggleAlwaysOnTop}
-            title={isAlwaysOnTop ? t('notepad.cancelAlwaysOnTop') : t('notepad.alwaysOnTop')}
+            title={isAlwaysOnTop ? t('notepad.alwaysOnTop') : t('notepad.cancelAlwaysOnTop')}
             className={clsx(
-              'flex h-7 w-7 items-center justify-center rounded-lg transition-colors',
+              'flex h-6 w-6 items-center justify-center rounded transition-colors',
               isAlwaysOnTop
-                ? 'bg-amber-500/20 text-amber-500 hover:bg-amber-500/30'
+                ? 'bg-amber-500/20 text-amber-500'
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             )}
           >
-            {isAlwaysOnTop ? <Pin size={14} className="fill-amber-500" /> : <PinOff size={14} />}
+            {isAlwaysOnTop ? <Pin size={13} className="fill-amber-500" /> : <PinOff size={13} />}
           </button>
-
-          <div className="mx-1 h-3.5 w-[1px] bg-border/60" />
 
           {/* Minimize */}
           <button
             onClick={handleMinimize}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <Minus size={14} />
+            <Minus size={13} />
           </button>
 
           {/* Close */}
           <button
             onClick={handleClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-500/20 hover:text-red-500"
+            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
           >
-            <X size={14} />
+            <X size={13} />
           </button>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Collapsible & Draggable Left Sidebar */}
+      {/* Main Content Pane */}
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Left Sidebar (Notes List) */}
         {isSidebarOpen && (
           <aside
             style={{ width: `${sidebarWidth}px` }}
-            className="flex shrink-0 flex-col border-r border-border/50 bg-muted/20"
+            className={clsx(
+              'flex shrink-0 flex-col overflow-hidden border-r border-border/40 bg-background/40 backdrop-blur-md transition-[width] duration-75',
+              isResizing && 'select-none transition-none'
+            )}
           >
-            {/* Search & New Note Header */}
-            <div className="flex flex-col gap-1.5 border-b border-border/40 p-2">
+            {/* Sidebar Top Header & Search */}
+            <div className="shrink-0 space-y-1.5 border-b border-border/40 p-2">
               {!isMini ? (
                 <>
-                  <div className="relative flex items-center">
-                    <Search size={13} className="absolute left-2 text-muted-foreground" />
+                  <div className="relative">
+                    <Search
+                      size={12}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
                     <input
                       type="text"
-                      placeholder={isStandard ? t('notepad.searchPlaceholder') : '搜索...'}
+                      placeholder={isCompact ? '搜索...' : t('notepad.searchNotes')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="h-7 w-full rounded-lg border border-border/50 bg-background/80 pl-7 pr-2 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-amber-500/60"
+                      className="w-full rounded-md border border-border/50 bg-background/60 py-1 pl-7 pr-2 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-amber-500/80"
                     />
                   </div>
 
                   <button
                     onClick={handleCreateNote}
-                    title={t('notepad.newNote')}
-                    className="flex h-7 items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/15 text-xs font-medium text-amber-600 transition-all hover:bg-amber-500/25 active:scale-[0.98] dark:text-amber-400"
+                    title="Ctrl+N"
+                    className="active:scale-98 flex w-full items-center justify-center gap-1 rounded-md bg-amber-500/15 py-1 text-xs font-semibold text-amber-500 transition-colors hover:bg-amber-500/25"
                   >
-                    <Plus size={14} />
-                    <span>{isStandard ? t('notepad.newNote') : '新建'}</span>
+                    <Plus size={13} />
+                    <span>{isCompact ? '+ 新建' : t('notepad.newNote')}</span>
                   </button>
                 </>
               ) : (
+                /* Mini Mode Top Button */
                 <div className="flex flex-col items-center gap-1">
                   <button
                     onClick={handleCreateNote}
-                    title={t('notepad.newNote')}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/15 text-amber-600 transition-all hover:bg-amber-500/25 active:scale-95 dark:text-amber-400"
+                    title="新建便签 (Ctrl+N)"
+                    className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-500/20 text-amber-500 transition-colors hover:bg-amber-500/30"
                   >
                     <Plus size={15} />
                   </button>
@@ -568,6 +634,7 @@ export function NotepadWindow() {
                   const isSelected = selectedNoteId === note.id;
                   const colorObj = NOTE_COLORS.find((c) => c.id === note.color) || NOTE_COLORS[0];
                   const noteTitle = note.title || 'Untitled Note';
+                  const noteSnippet = extractPlainTextPreview(note.content) || '(Empty)';
 
                   if (isMini) {
                     // Mini Icon Mode
@@ -575,7 +642,7 @@ export function NotepadWindow() {
                       <div
                         key={note.id}
                         onClick={() => selectNote(note)}
-                        title={`${noteTitle}\n${note.content || '(Empty)'}`}
+                        title={`${noteTitle}\n${noteSnippet}`}
                         className={clsx(
                           'group relative mx-auto flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition-all',
                           isSelected
@@ -605,7 +672,7 @@ export function NotepadWindow() {
                       <div
                         key={note.id}
                         onClick={() => selectNote(note)}
-                        title={`${noteTitle}\n${note.content || '(Empty)'}`}
+                        title={`${noteTitle}\n${noteSnippet}`}
                         className={clsx(
                           'group relative flex cursor-pointer items-center justify-between rounded-lg border p-1.5 text-left transition-all',
                           isSelected
@@ -651,7 +718,7 @@ export function NotepadWindow() {
                       </div>
 
                       <p className="line-clamp-2 break-all text-[11px] leading-relaxed text-muted-foreground/80">
-                        {note.content || '(Empty)'}
+                        {noteSnippet}
                       </p>
 
                       <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground/50">
@@ -728,6 +795,86 @@ export function NotepadWindow() {
               className="mr-2 min-w-0 flex-1 truncate bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground/40"
             />
 
+            {/* Quick Markdown Format Buttons */}
+            {editor && (
+              <div className="mr-2 hidden items-center gap-0.5 sm:flex">
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleBold().run()}
+                  title="加粗 (Ctrl+B)"
+                  className={clsx(
+                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
+                    editor.isActive('bold') && 'bg-amber-500/20 font-bold text-amber-500'
+                  )}
+                >
+                  <BoldIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleStrike().run()}
+                  title="删除线 (~~文字~~)"
+                  className={clsx(
+                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
+                    editor.isActive('strike') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                >
+                  <StrikeIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleTaskList().run()}
+                  title="待办任务清单 (输入 [] + 空格)"
+                  className={clsx(
+                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
+                    editor.isActive('taskList') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                >
+                  <TaskIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleBulletList().run()}
+                  title="无序列表 (输入 - + 空格)"
+                  className={clsx(
+                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
+                    editor.isActive('bulletList') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                >
+                  <ListIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                  title="有序列表 (输入 1. + 空格)"
+                  className={clsx(
+                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
+                    editor.isActive('orderedList') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                >
+                  <OrderedListIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleCode().run()}
+                  title="行内代码 (`代码`)"
+                  className={clsx(
+                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
+                    editor.isActive('code') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                >
+                  <CodeIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().setHorizontalRule().run()}
+                  title="分隔线 (输入 --- 回车)"
+                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                >
+                  <DividerIcon size={12} />
+                </button>
+              </div>
+            )}
+
             {/* Color Tag Picker & Top Actions */}
             <div className="flex shrink-0 items-center gap-1.5">
               {NOTE_COLORS.map((c) => (
@@ -770,16 +917,94 @@ export function NotepadWindow() {
             </div>
           </div>
 
-          {/* Textarea Editor */}
-          <div className="relative flex-1 p-3">
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={handleContentChange}
-              placeholder={t('notepad.contentPlaceholder')}
-              className="no-scrollbar h-full w-full select-text resize-none bg-transparent font-mono text-xs leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/40"
-              autoFocus
-            />
+          {/* Tiptap Rich Markdown Editor */}
+          <div className="relative flex-1 overflow-y-auto p-3 text-xs leading-relaxed">
+            {editor && (
+              <BubbleMenu
+                editor={editor}
+                className="flex items-center gap-1 rounded-lg border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md dark:bg-neutral-900/95"
+              >
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleBold().run()}
+                  className={clsx(
+                    'rounded p-1.5 transition-colors hover:bg-accent',
+                    editor.isActive('bold') && 'bg-amber-500/20 font-bold text-amber-500'
+                  )}
+                  title="加粗"
+                >
+                  <BoldIcon size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleStrike().run()}
+                  className={clsx(
+                    'rounded p-1.5 transition-colors hover:bg-accent',
+                    editor.isActive('strike') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                  title="删除线"
+                >
+                  <StrikeIcon size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                  className={clsx(
+                    'rounded p-1.5 transition-colors hover:bg-accent',
+                    editor.isActive('heading', { level: 1 }) && 'bg-amber-500/20 text-amber-500'
+                  )}
+                  title="大标题"
+                >
+                  <Heading1 size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                  className={clsx(
+                    'rounded p-1.5 transition-colors hover:bg-accent',
+                    editor.isActive('heading', { level: 2 }) && 'bg-amber-500/20 text-amber-500'
+                  )}
+                  title="中标题"
+                >
+                  <Heading2 size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleTaskList().run()}
+                  className={clsx(
+                    'rounded p-1.5 transition-colors hover:bg-accent',
+                    editor.isActive('taskList') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                  title="待办复选框"
+                >
+                  <TaskIcon size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleBulletList().run()}
+                  className={clsx(
+                    'rounded p-1.5 transition-colors hover:bg-accent',
+                    editor.isActive('bulletList') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                  title="无序列表"
+                >
+                  <ListIcon size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleCode().run()}
+                  className={clsx(
+                    'rounded p-1.5 transition-colors hover:bg-accent',
+                    editor.isActive('code') && 'bg-amber-500/20 text-amber-500'
+                  )}
+                  title="代码"
+                >
+                  <CodeIcon size={13} />
+                </button>
+              </BubbleMenu>
+            )}
+
+            <EditorContent editor={editor} className="h-full min-h-[140px] focus:outline-none" />
           </div>
 
           {/* Footer Status Bar & Action Buttons - Single line guaranteed */}

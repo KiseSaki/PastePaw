@@ -168,4 +168,94 @@
     mask-image: linear-gradient(to right, black 85%, transparent 100%);
     -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
   }
+
+  /* Tiptap Rich Note Editor Styles */
+  .tiptap {
+    @apply text-foreground outline-none;
+  }
+
+  .tiptap p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: hsl(var(--muted-foreground));
+    opacity: 0.5;
+    pointer-events: none;
+    height: 0;
+  }
+
+  .tiptap p {
+    @apply my-1 leading-relaxed;
+  }
+
+  .tiptap h1 {
+    @apply mb-2 mt-4 text-xl font-bold tracking-tight text-foreground;
+  }
+
+  .tiptap h2 {
+    @apply mb-1.5 mt-3 text-lg font-semibold tracking-tight text-foreground;
+  }
+
+  .tiptap h3 {
+    @apply mb-1 mt-2.5 text-base font-semibold tracking-tight text-foreground;
+  }
+
+  .tiptap ul:not([data-type='taskList']) {
+    @apply my-1.5 list-outside list-disc space-y-0.5 pl-5;
+  }
+
+  .tiptap ol {
+    @apply my-1.5 list-outside list-decimal space-y-0.5 pl-5;
+  }
+
+  .tiptap li {
+    @apply my-0.5 leading-relaxed;
+  }
+
+  .tiptap ul[data-type='taskList'] {
+    @apply my-2 list-none space-y-1 p-0;
+  }
+
+  .tiptap li[data-type='taskItem'] {
+    @apply my-1 flex items-start gap-2.5 leading-relaxed;
+  }
+
+  .tiptap li[data-type='taskItem'] > label {
+    @apply flex cursor-pointer select-none items-center justify-center pt-1;
+  }
+
+  .tiptap li[data-type='taskItem'] > label input[type='checkbox'] {
+    @apply h-4 w-4 cursor-pointer rounded border-border accent-amber-500 transition-all duration-150;
+  }
+
+  .tiptap li[data-type='taskItem'] > div {
+    @apply min-w-0 flex-1;
+  }
+
+  .tiptap li[data-type='taskItem'][data-checked='true'] > div {
+    @apply text-muted-foreground line-through opacity-60;
+  }
+
+  .tiptap blockquote {
+    @apply my-2 border-l-4 border-amber-500/60 pl-3 italic text-muted-foreground;
+  }
+
+  .tiptap hr {
+    @apply my-3 border-0 border-t border-border/80;
+  }
+
+  .tiptap code {
+    @apply rounded border border-border/40 bg-muted/80 px-1.5 py-0.5 font-mono text-xs text-amber-500 dark:text-amber-400;
+  }
+
+  .tiptap pre {
+    @apply my-2 overflow-x-auto rounded-xl border border-white/10 bg-neutral-900 p-3 font-mono text-xs text-neutral-100;
+  }
+
+  .tiptap pre code {
+    @apply border-0 bg-transparent p-0 text-inherit;
+  }
+
+  .tiptap a {
+    @apply cursor-pointer text-amber-500 underline underline-offset-2 transition-colors hover:text-amber-400;
+  }
 }
