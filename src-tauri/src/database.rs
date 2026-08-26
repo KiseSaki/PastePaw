@@ -180,6 +180,15 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
+        // Cleanup any legacy auto-saved HTML tags or default "Untitled Note" from title field
+        let _ = sqlx::query(
+            r#"
+            UPDATE notes SET title = '' WHERE title LIKE '<%' OR title = 'Untitled Note';
+            "#,
+        )
+        .execute(&self.pool)
+        .await;
+
         Ok(())
     }
 

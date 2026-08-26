@@ -260,7 +260,11 @@ export function NotepadWindow() {
     (note: NoteItem) => {
       activeNoteRef.current = note;
       setSelectedNoteId(note.id);
-      setTitle(note.title);
+      const cleanTitle =
+        note.title && !note.title.startsWith('<') && note.title !== 'Untitled Note'
+          ? note.title.trim()
+          : '';
+      setTitle(cleanTitle);
       setContent(note.content);
       setColor(note.color || 'default');
       setIsPinned(note.is_pinned);
@@ -707,8 +711,15 @@ export function NotepadWindow() {
                 notes.map((note) => {
                   const isSelected = selectedNoteId === note.id;
                   const colorObj = NOTE_COLORS.find((c) => c.id === note.color) || NOTE_COLORS[0];
-                  const noteTitle = note.title || 'Untitled Note';
-                  const noteSnippet = extractPlainTextPreview(note.content) || '(Empty)';
+                  const cleanExplicitTitle =
+                    note.title && !note.title.startsWith('<') && note.title !== 'Untitled Note'
+                      ? note.title.trim()
+                      : '';
+                  const noteTitle =
+                    cleanExplicitTitle ||
+                    extractPlainTextPreview(note.content, 40) ||
+                    t('notepad.untitled');
+                  const noteSnippet = extractPlainTextPreview(note.content) || `(${t('notepad.empty')})`;
 
                   if (isMini) {
                     // Mini Icon Mode

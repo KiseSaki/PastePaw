@@ -12,10 +12,19 @@ use std::sync::Arc;
 use std::time::Instant;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
+fn sanitize_note_title(title: &str) -> String {
+    let t = title.trim();
+    if t.is_empty() || t == "Untitled Note" || (t.contains('<') && t.contains('>')) {
+        String::new()
+    } else {
+        t.to_string()
+    }
+}
+
 fn note_to_item(note: &Note) -> NoteItem {
     NoteItem {
         id: note.uuid.clone(),
-        title: note.title.clone(),
+        title: sanitize_note_title(&note.title),
         content: note.content.clone(),
         color: note.color.clone().unwrap_or_else(|| "default".to_string()),
         is_pinned: note.is_pinned,
@@ -1246,15 +1255,8 @@ pub async fn create_note(
     let note_color = color.unwrap_or_else(|| "default".to_string());
 
     let note_title = match title {
-        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
-        _ => {
-            let first_line = content.lines().next().unwrap_or("").trim();
-            if first_line.is_empty() {
-                "Untitled Note".to_string()
-            } else {
-                first_line.chars().take(50).collect::<String>()
-            }
-        }
+        Some(t) => sanitize_note_title(&t),
+        None => String::new(),
     };
 
     sqlx::query(
@@ -1295,15 +1297,8 @@ pub async fn update_note(
     let pool = &db.pool;
 
     let note_title = match title {
-        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
-        _ => {
-            let first_line = content.lines().next().unwrap_or("").trim();
-            if first_line.is_empty() {
-                "Untitled Note".to_string()
-            } else {
-                first_line.chars().take(50).collect::<String>()
-            }
-        }
+        Some(t) => sanitize_note_title(&t),
+        None => String::new(),
     };
 
     let note_color = color.unwrap_or_else(|| "default".to_string());
