@@ -88,6 +88,52 @@ export function NotepadWindow() {
   const [opacity, setOpacity] = useState(98);
   const [showOpacitySlider, setShowOpacitySlider] = useState(false);
 
+  // Auto-hide controls when not hovered and not focused
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(() =>
+    typeof document !== 'undefined' ? document.hasFocus() : true
+  );
+
+  useEffect(() => {
+    const handleMouseEnter = () => setIsHovered(true);
+    const handleMouseLeave = (e: MouseEvent) => {
+      if (
+        !e.relatedTarget &&
+        (e.clientY <= 0 ||
+          e.clientX <= 0 ||
+          e.clientX >= window.innerWidth ||
+          e.clientY >= window.innerHeight)
+      ) {
+        setIsHovered(false);
+      }
+    };
+    const handleMouseMove = () => {
+      setIsHovered(true);
+    };
+
+    const handleFocus = () => setIsFocused(true);
+    const handleBlur = () => {
+      setIsFocused(false);
+      setIsHovered(false);
+    };
+
+    window.addEventListener('mouseenter', handleMouseEnter);
+    window.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseleave', handleMouseLeave);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('mouseenter', handleMouseEnter);
+      window.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseleave', handleMouseLeave);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
+  const showChrome = isHovered || isFocused || showOpacitySlider || isResizing;
+
   // Editor states
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -491,13 +537,22 @@ export function NotepadWindow() {
 
   return (
     <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       className="relative flex h-screen w-screen select-none flex-col overflow-hidden border border-border/80 bg-background text-foreground shadow-2xl transition-all"
       style={{
         opacity: opacity / 100,
       }}
     >
       {/* Top Header / Drag Titlebar - relative z-30 ensures popovers float above main content */}
-      <header className="relative z-30 flex h-9 shrink-0 items-center justify-between border-b border-border/40 bg-background/50 px-3 backdrop-blur-md">
+      <header
+        className={clsx(
+          'relative z-30 flex shrink-0 items-center justify-between bg-background/50 backdrop-blur-md transition-all duration-200 ease-in-out',
+          showChrome
+            ? 'h-9 border-b border-border/40 px-3 opacity-100'
+            : 'h-0 border-b-0 px-3 py-0 opacity-0 overflow-hidden pointer-events-none'
+        )}
+      >
         {/* Left window drag zone */}
         <div data-tauri-drag-region className="drag-area flex flex-1 items-center gap-2">
           <button
@@ -804,7 +859,14 @@ export function NotepadWindow() {
           )}
         >
           {/* Note Top Toolbar */}
-          <div className="flex shrink-0 items-center justify-between border-b border-border/40 bg-background/30 px-3 py-1.5 backdrop-blur-sm">
+          <div
+            className={clsx(
+              'flex shrink-0 items-center justify-between bg-background/30 backdrop-blur-sm transition-all duration-200 ease-in-out',
+              showChrome
+                ? 'h-9 border-b border-border/40 px-3 opacity-100'
+                : 'h-0 border-b-0 px-3 py-0 opacity-0 overflow-hidden pointer-events-none'
+            )}
+          >
             {/* Title Input */}
             <input
               type="text"
@@ -1027,7 +1089,14 @@ export function NotepadWindow() {
           </div>
 
           {/* Footer Status Bar & Action Buttons - Single line guaranteed */}
-          <footer className="flex h-8 shrink-0 select-none items-center justify-between border-t border-border/40 bg-background/40 px-3 text-[11px] text-muted-foreground backdrop-blur-sm">
+          <footer
+            className={clsx(
+              'flex shrink-0 select-none items-center justify-between bg-background/40 text-[11px] text-muted-foreground backdrop-blur-sm transition-all duration-200 ease-in-out',
+              showChrome
+                ? 'h-8 border-t border-border/40 px-3 opacity-100'
+                : 'h-0 border-t-0 px-3 py-0 opacity-0 overflow-hidden pointer-events-none'
+            )}
+          >
             <div className="flex min-w-0 items-center gap-1.5 truncate text-[11px]">
               <span className="truncate">
                 {t('notepad.charCount', { chars: charCount, words: wordCount })}
