@@ -197,7 +197,7 @@ export function NotepadWindow() {
         nested: true,
       }),
       Placeholder.configure({
-        placeholder: '输入便签内容，支持 Markdown (如 - 列表, 1. 列表, [] 待办, **加粗**)...',
+        placeholder: t('notepad.contentPlaceholder') || '输入便签内容，支持 Markdown (如 - 列表, 1. 列表, [] 待办, **加粗**)...',
       }),
       Link.configure({
         openOnClick: false,
@@ -569,7 +569,7 @@ export function NotepadWindow() {
 
           <span className="flex items-center gap-1 text-xs font-bold tracking-tight text-foreground/90">
             <StickyNote size={14} className="text-amber-500" />
-            <span>PastePaw 便签</span>
+            <span>PastePaw {t('notepad.title')}</span>
           </span>
 
           {isSaving && (
@@ -668,7 +668,7 @@ export function NotepadWindow() {
                     />
                     <input
                       type="text"
-                      placeholder={isCompact ? '搜索...' : t('notepad.searchNotes')}
+                      placeholder={isCompact ? t('notepad.searchCompact') : t('notepad.searchNotes')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full rounded-md border border-border/50 bg-background/60 py-1 pl-7 pr-2 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-amber-500/80"
@@ -681,7 +681,7 @@ export function NotepadWindow() {
                     className="active:scale-98 flex w-full items-center justify-center gap-1 rounded-md bg-amber-500/15 py-1 text-xs font-semibold text-amber-500 transition-colors hover:bg-amber-500/25"
                   >
                     <Plus size={13} />
-                    <span>{isCompact ? '+ 新建' : t('notepad.newNote')}</span>
+                    <span>{isCompact ? t('notepad.newNoteCompact') : t('notepad.newNote')}</span>
                   </button>
                 </>
               ) : (
@@ -689,7 +689,7 @@ export function NotepadWindow() {
                 <div className="flex flex-col items-center gap-1">
                   <button
                     onClick={handleCreateNote}
-                    title="新建便签 (Ctrl+N)"
+                    title={`${t('notepad.newNote')} (Ctrl+N)`}
                     className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-500/20 text-amber-500 transition-colors hover:bg-amber-500/30"
                   >
                     <Plus size={15} />
@@ -851,7 +851,7 @@ export function NotepadWindow() {
               'group relative flex w-1.5 shrink-0 cursor-col-resize select-none items-center justify-center transition-colors',
               isResizing ? 'bg-amber-500/50' : 'hover:bg-amber-500/30'
             )}
-            title="按住拖拽调整侧边栏宽度"
+            title={t('notepad.resizeSidebarTip')}
           >
             <div
               className={clsx(
@@ -893,7 +893,7 @@ export function NotepadWindow() {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBold().run()}
-                  title="加粗 (Ctrl+B)"
+                  title={`${t('notepad.bold')} (Ctrl+B)`}
                   className={clsx(
                     'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
                     editor.isActive('bold') && 'bg-amber-500/20 font-bold text-amber-500'
@@ -904,7 +904,7 @@ export function NotepadWindow() {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleStrike().run()}
-                  title="删除线 (~~文字~~)"
+                  title={`${t('notepad.strike')} (~~文字~~)`}
                   className={clsx(
                     'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
                     editor.isActive('strike') && 'bg-amber-500/20 text-amber-500'
@@ -915,7 +915,7 @@ export function NotepadWindow() {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleTaskList().run()}
-                  title="待办任务清单 (输入 [] + 空格)"
+                  title={`${t('notepad.taskList')} ([] + 空格)`}
                   className={clsx(
                     'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
                     editor.isActive('taskList') && 'bg-amber-500/20 text-amber-500'
@@ -926,7 +926,7 @@ export function NotepadWindow() {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  title="无序列表 (输入 - + 空格)"
+                  title={`${t('notepad.bulletList')} (- + 空格)`}
                   className={clsx(
                     'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
                     editor.isActive('bulletList') && 'bg-amber-500/20 text-amber-500'
@@ -937,7 +937,7 @@ export function NotepadWindow() {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                  title="有序列表 (输入 1. + 空格)"
+                  title={`${t('notepad.orderedList')} (1. + 空格)`}
                   className={clsx(
                     'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
                     editor.isActive('orderedList') && 'bg-amber-500/20 text-amber-500'
@@ -948,7 +948,7 @@ export function NotepadWindow() {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleCode().run()}
-                  title="行内代码 (`代码`)"
+                  title={`${t('notepad.code')} (\`代码\`)}`}
                   className={clsx(
                     'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
                     editor.isActive('code') && 'bg-amber-500/20 text-amber-500'
@@ -959,7 +959,7 @@ export function NotepadWindow() {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().setHorizontalRule().run()}
-                  title="分隔线 (输入 --- 回车)"
+                  title={`${t('notepad.divider')} (--- 回车)`}
                   className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
                 >
                   <DividerIcon size={12} />
@@ -1023,7 +1023,7 @@ export function NotepadWindow() {
                     'rounded p-1.5 transition-colors hover:bg-accent',
                     editor.isActive('bold') && 'bg-amber-500/20 font-bold text-amber-500'
                   )}
-                  title="加粗"
+                  title={t('notepad.bold')}
                 >
                   <BoldIcon size={13} />
                 </button>
@@ -1034,7 +1034,7 @@ export function NotepadWindow() {
                     'rounded p-1.5 transition-colors hover:bg-accent',
                     editor.isActive('strike') && 'bg-amber-500/20 text-amber-500'
                   )}
-                  title="删除线"
+                  title={t('notepad.strike')}
                 >
                   <StrikeIcon size={13} />
                 </button>
@@ -1045,7 +1045,7 @@ export function NotepadWindow() {
                     'rounded p-1.5 transition-colors hover:bg-accent',
                     editor.isActive('heading', { level: 1 }) && 'bg-amber-500/20 text-amber-500'
                   )}
-                  title="大标题"
+                  title={t('notepad.heading1')}
                 >
                   <Heading1 size={13} />
                 </button>
@@ -1056,7 +1056,7 @@ export function NotepadWindow() {
                     'rounded p-1.5 transition-colors hover:bg-accent',
                     editor.isActive('heading', { level: 2 }) && 'bg-amber-500/20 text-amber-500'
                   )}
-                  title="中标题"
+                  title={t('notepad.heading2')}
                 >
                   <Heading2 size={13} />
                 </button>
@@ -1067,7 +1067,7 @@ export function NotepadWindow() {
                     'rounded p-1.5 transition-colors hover:bg-accent',
                     editor.isActive('taskList') && 'bg-amber-500/20 text-amber-500'
                   )}
-                  title="待办复选框"
+                  title={t('notepad.taskList')}
                 >
                   <TaskIcon size={13} />
                 </button>
@@ -1078,7 +1078,7 @@ export function NotepadWindow() {
                     'rounded p-1.5 transition-colors hover:bg-accent',
                     editor.isActive('bulletList') && 'bg-amber-500/20 text-amber-500'
                   )}
-                  title="无序列表"
+                  title={t('notepad.bulletList')}
                 >
                   <ListIcon size={13} />
                 </button>
@@ -1089,7 +1089,7 @@ export function NotepadWindow() {
                     'rounded p-1.5 transition-colors hover:bg-accent',
                     editor.isActive('code') && 'bg-amber-500/20 text-amber-500'
                   )}
-                  title="代码"
+                  title={t('notepad.code')}
                 >
                   <CodeIcon size={13} />
                 </button>
