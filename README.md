@@ -11,9 +11,14 @@
   <a href="README.md">English</a>
 </p>
 
+> This repository is a modified fork of [XueshiQiao/PastePaw](https://github.com/XueshiQiao/PastePaw).
+>
+> The original project and this fork are distributed under the GNU GPL v3 license.
+> This fork contains modifications maintained by KiseSaki since 2026.
+
 <p align="center">
-  <a href="https://github.com/XueshiQiao/PastePaw/actions/workflows/release.yml?branch=main"><img src="https://img.shields.io/github/actions/workflow/status/XueshiQiao/PastePaw/release.yml?branch=main&style=flat" alt="CI status"></a>
-  <a href="https://github.com/XueshiQiao/PastePaw/releases"><img src="https://img.shields.io/github/v/release/XueshiQiao/PastePaw?include_prereleases&style=flat" alt="GitHub release"></a>
+  <a href="https://github.com/KiseSaki/PastePaw/actions/workflows/release.yml?branch=main"><img src="https://img.shields.io/github/actions/workflow/status/KiseSaki/PastePaw/release.yml?branch=main&style=flat" alt="CI status"></a>
+  <a href="https://github.com/KiseSaki/PastePaw/releases"><img src="https://img.shields.io/github/v/release/KiseSaki/PastePaw?include_prereleases&style=flat" alt="GitHub release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL3.0-blue.svg?style=flat" alt="MIT License"></a>
 </p>
 
@@ -51,14 +56,18 @@ Also available for **macOS** on the [App Store](https://apps.apple.com/us/app/pa
 
 ### 1. Install via Winget
 
-```bash
+The Winget package currently points to the upstream version:
+
+```powershell
 winget install XueshiQiao.PastePaw
 ```
+
+To install the version maintained by this fork, use the packages from this repository's GitHub Releases.
 
 ### 2. Download from GitHub Releases (Windows)
 
 Download the latest installer directly from:
-[https://github.com/XueshiQiao/PastePaw/releases](https://github.com/XueshiQiao/PastePaw/releases)
+[https://github.com/KiseSaki/PastePaw/releases](https://github.com/KiseSaki/PastePaw/releases)
 
 > 🔍 **Security:** Every release is automatically scanned with [VirusTotal](https://www.virustotal.com/) (70+ antivirus engines). Scan results are linked at the bottom of each release note.
 

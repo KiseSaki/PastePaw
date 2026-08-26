@@ -11,9 +11,14 @@
   <a href="README.md">English</a>
 </p>
 
+> 本仓库基于 [XueshiQiao/PastePaw](https://github.com/XueshiQiao/PastePaw) 修改并持续维护。
+>
+> 原项目及本 Fork 均按照 GNU GPL v3 许可证发布。
+> 本仓库包含自 2026 年起由 KiseSaki 维护的修改内容。
+
 <p align="center">
-  <a href="https://github.com/XueshiQiao/PastePaw/actions/workflows/release.yml?branch=main"><img src="https://img.shields.io/github/actions/workflow/status/XueshiQiao/PastePaw/release.yml?branch=main&style=flat" alt="CI status"></a>
-  <a href="https://github.com/XueshiQiao/PastePaw/releases"><img src="https://img.shields.io/github/v/release/XueshiQiao/PastePaw?include_prereleases&style=flat" alt="GitHub release"></a>
+  <a href="https://github.com/KiseSaki/PastePaw/actions/workflows/release.yml?branch=main"><img src="https://img.shields.io/github/actions/workflow/status/KiseSaki/PastePaw/release.yml?branch=main&style=flat" alt="CI status"></a>
+  <a href="https://github.com/KiseSaki/PastePaw/releases"><img src="https://img.shields.io/github/v/release/KiseSaki/PastePaw?include_prereleases&style=flat" alt="GitHub release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL3.0-blue.svg?style=flat" alt="MIT License"></a>
 </p>
 
@@ -46,19 +51,23 @@
 
 ## 安装
 
-两个版本完全一致，winget 版本因需要提交到 winget 审核，需要半天到一天的时间
-提交到 winget 仓库的版本就是 GitHub Release 中构建的版本，所以完全一致
+目前 Winget 中的包对应上游版本，可能与本 Fork 的维护版本不同。
 
 ### 1. 使用 Winget 安装
+
+目前 Winget 中的包对应上游版本：
+
 打开命令行或者 Powershell
-```bash
+```powershell
 winget install XueshiQiao.PastePaw
 ```
+
+如需安装本 Fork 维护的版本，请从本仓库 GitHub Releases 下载。
 
 ### 2. 从 GitHub Releases 下载
 
 直接从 Github 安装最新版
-[https://github.com/XueshiQiao/PastePaw/releases](https://github.com/XueshiQiao/PastePaw/releases)
+[https://github.com/KiseSaki/PastePaw/releases](https://github.com/KiseSaki/PastePaw/releases)
 
 > 🔍 **安全说明：** 每个版本发布时均会自动通过 [VirusTotal](https://www.virustotal.com/) 进行扫描（覆盖 70+ 款杀毒引擎）。扫描结果链接附在每个 Release 说明的底部。
 
