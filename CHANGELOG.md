@@ -2,6 +2,28 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.3
+
+### Added
+- Smooth Show/Hide Transition Animations: Added fluid height and opacity CSS transitions for the floating notepad window's header, formatting toolbar, and action footer when hovering/focusing or blurring/unhovering.
+
+### Fixed
+- Fixed raw HTML leaking into note titles: Note titles now properly filter out raw HTML tags (e.g. `<ul><li><p>...`) in the database, editor input, and sidebar list, automatically falling back to clean plain-text previews for untitled notes.
+- Fixed list item numbers and bullet markers in Tiptap Markdown editor by isolating list styles from Tailwind preflight CSS reset.
+- Extended task list input rule to support typing `[] ` and `[ ] ` directly without requiring `- ` prefix.
+- Fixed notepad window minimize button not minimizing the window and always-on-top toggle cancellation.
+- Added complete localization coverage for Chinese and English in the notepad window (tooltips, search placeholders, action labels, and toast notifications).
+
+### 新增
+- 便签窗口平滑过渡显隐动画：为独立便签窗口的顶部标题栏、格式工具栏与底部操作栏添加流畅的渐变折叠/展开过渡动效，悬浮聚焦与失焦离开时不再生硬突变。
+
+### 修复
+- 修复便签侧边栏与主窗口标题错误显示 HTML 标签的问题：彻底过滤富文本标签（如 `<ul><li><p>...`），未命名的便签自动回退显示干净的纯文本内容预览。
+- 修复便签输入有序列表与无序列表时标号与圆点丢失的问题：隔离 Tailwind preflight 样式重置，确保列表样式正常显示。
+- 扩展待办任务输入规则：支持输入 `[] ` 与 `[ ] ` 直接快速创建待办复选框。
+- 修复便签窗口点击最小化按钮无效以及取消置顶未实时生效的问题。
+- 补全便签窗口中英文国际化语言包：修复复制提示、搜索框占位符、工具栏格式提示等多处未翻译文本。
+
 ## v1.4.2
 
 ### Fixed
