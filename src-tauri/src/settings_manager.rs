@@ -21,8 +21,17 @@ impl SettingsManager {
                 Err(_) => AppSettings::default(),
             }
         } else {
-            // Migrate from SQLite or use default
-            Self::migrate_from_sqlite(db).await
+            // Check if legacy settings file from previous identifier (me.xueshi.pastepaw) exists
+            let legacy_path = dirs::data_dir().map(|d| d.join("me.xueshi.pastepaw").join("settings.json"));
+            if let Some(legacy_p) = legacy_path.filter(|p| p.exists()) {
+                match fs::read_to_string(&legacy_p) {
+                    Ok(content) => serde_json::from_str(&content).unwrap_or_else(|_| AppSettings::default()),
+                    Err(_) => Self::migrate_from_sqlite(db).await,
+                }
+            } else {
+                // Migrate from SQLite or use default
+                Self::migrate_from_sqlite(db).await
+            }
         };
 
         // Ensure we save it once immediately if migrating, so file exists

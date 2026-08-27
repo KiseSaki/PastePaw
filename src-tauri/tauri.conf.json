@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2.0.0",
   "productName": "PastePaw",
   "version": "1.4.3",
-  "identifier": "me.xueshi.pastepaw",
+  "identifier": "io.github.kisesaki.pastepaw",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -58,9 +58,9 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/XueshiQiao/PastePaw/releases/latest/download/latest.json"
+        "https://github.com/KiseSaki/PastePaw/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDAxNDhBMzY2RUIxMTkzQTcKUldTbmt4SHJacU5JQVEzdWxCUXNWcE9hN2N2QzhzSjB3OC9RT0lPbVNUSXR2YlZQRWxsaE8ydzMK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY2QzczQjZDNUJDQzZBMzEKUldReGFzeGJiRHZIOXFwaGN0ekF1cUNrWHVsTTlJVkJOV0RGckZlYTl3cDJudnk2dVZkRkZaQnMK"
     }
   }
 }
