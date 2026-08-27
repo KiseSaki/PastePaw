@@ -2,6 +2,36 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.4
+
+### Upgrade Notice
+- **Manual Upgrade Recommended for v1.4.3 and Earlier**: Due to the migration of the application identifier to `io.github.kisesaki.pastepaw`, auto-update from v1.4.3 is not supported (v1.4.3 still targets the upstream updater endpoint and signature key). When upgrading from v1.4.3 or earlier versions of this fork, please uninstall the previous version before installing v1.4.4. All core user data (clipboard history, pins, notes, images) is safely stored in `%APPDATA%\PastePaw` and will not be deleted during uninstallation. Existing application settings will also be migrated automatically upon first launch.
+
+### Changed
+- **Independent Application Identifier**: Migrated Tauri application identifier from `me.xueshi.pastepaw` to `io.github.kisesaki.pastepaw`, establishing an independent identity for this fork.
+- **Fork Updater Endpoint & Keyring**: Pointed auto-updater endpoint to `KiseSaki/PastePaw` releases and established a dedicated Tauri Updater signature key for future releases.
+- **CLI Dependency Upgrade**: Upgraded `@tauri-apps/cli` to `2.11.4`.
+
+### Fixed & Migration
+- **Settings Migration Compatibility**: Added automatic settings import from `%APPDATA%\me.xueshi.pastepaw\settings.json` to `%APPDATA%\io.github.kisesaki.pastepaw\settings.json` on first launch when new settings do not yet exist.
+
+### CI & Release
+- **Cleaned Upstream Release Workflows**: Removed upstream Winget publishing job (`XueshiQiao.PastePaw`) and Apps Gallery repository dispatch (`XueshiQiao/XueshiQiao.github.io`) from GitHub Actions workflows.
+
+### 升级说明
+- **v1.4.3 及更早版本建议手动重装**：因本次版本调整了应用内部 identifier，v1.4.3 仍使用旧版更新源与上游签名公钥，因此不支持从 v1.4.3 自动更新至 v1.4.4。从 v1.4.3 及更早的本 Fork 版本升级时，建议先卸载旧版再安装 v1.4.4。用户的剪贴板历史、收藏、便签、图片等核心数据均独立保存在 `%APPDATA%\PastePaw` 中，卸载程序不会删除这些数据；旧版设置也会在首次启动新版时自动平滑迁移。
+
+### 变更
+- **独立应用标识符**：将 Tauri Application Identifier 从 `me.xueshi.pastepaw` 迁移为 `io.github.kisesaki.pastepaw`，确立当前 Fork 独立的系统应用身份。
+- **独立更新源与签名链**：将自动更新源切换至 `KiseSaki/PastePaw`，并建立当前 Fork 专属的 Tauri Updater 签名公钥链（v1.4.4 将作为后续独立自动更新链的起点）。
+- **依赖版本升级**：升级 `@tauri-apps/cli` 至当前已验证的 `2.11.4`。
+
+### 修复与迁移
+- **旧版设置平滑兼容**：增加旧版设置自动迁移逻辑，首次启动新版且新配置文件不存在时，自动从 `%APPDATA%\me.xueshi.pastepaw\settings.json` 导入配置至 `%APPDATA%\io.github.kisesaki.pastepaw\settings.json`。
+
+### CI 与发布
+- **清理上游发布任务**：移除 Fork 中继承的上游 Winget 自动发布任务（`XueshiQiao.PastePaw`）以及向 `XueshiQiao/XueshiQiao.github.io` 发送 Apps Gallery repository dispatch 的工作流逻辑。
+
 ## v1.4.3
 
 ### Added
