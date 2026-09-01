@@ -168,3 +168,6 @@ CHANGELOG.md includes both English and Chinese entries for every version. Always
 ### Git Commit Messages
 All git commit messages MUST be written in Chinese (e.g. `feat: 新增...`, `fix: 修复...`, `chore: 升级...`).
 
+### Upstream Repositories
+NEVER merge or pull changes from upstream. Do not fetch, pull, rebase, or merge any content from the upstream/source repository under any circumstances.
+
