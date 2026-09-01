@@ -26,12 +26,17 @@ A beautiful clipboard history manager for Windows, built with Rust + Tauri + Rea
 
 Also available for **macOS** on the [App Store](https://apps.apple.com/us/app/pastepaw/id6759132043?mt=12) — visit [pastepaw.com](https://pastepaw.com/) for more.
 
+## Privacy & Offline Guarantee
+
+> **PastePaw operates fully offline at runtime.** Clipboard history, notes, images, and settings are stored locally. The application does not include telemetry, analytics, automatic update checks, cloud synchronization, or background network requests.
+
 ## Features
 
-- 🔒 **Private** - IMPORTANT! All data stored locally
+- 🔒 **100% Local & Offline** - All clipboard data, images, notes, and settings stay on your machine
 - 🎨 **Beautiful UI** - Modern dark/light theme with native Windows Mica & Mica-Alt window effects
 - ⚡ **Fast & Lightweight** - Built with Rust for performance
 - 📋 **Clipboard History** - Automatically saves everything you copy
+- 📝 **Built-in Notepad** - Rich-text scratchpad with Markdown & checklist support
 - 🖥️ **Support multiple Displays** - Show on the active display
 - 🔍 **Search** - Quickly find previously copied content
 - 📁 **Folders** - Organize clips into custom folders
@@ -39,8 +44,6 @@ Also available for **macOS** on the [App Store](https://apps.apple.com/us/app/pa
 - ⌨️ **Customizable Hotkey** - Set your preferred shortcut to open the history
 - 🔄 **Infinite Scroll** - Seamlessly browse through unlimited history
 - 🛡️ **Smart Filtering** - Intelligent debounce logic to ignore "Ghost Copies" from other clipboard tools
-- 🤖 **AI Powered** - Built-in AI to summarize, translate, explain code, and fix grammar
-- ⚙️ **Customizable AI** - Fully customize AI action names and system prompts to suit your workflow
 
 ## Screenshots
 
@@ -101,20 +104,6 @@ PastePaw allows you to exclude specific applications from being recorded in the 
     1.  **Executable Name** (e.g., `notepad.exe`) - Matches any instance of this app regardless of location.
     2.  **Full File Path** (e.g., `C:\Windows\System32\notepad.exe`) - Matches only the specific installed instance.
 - **Case Insensitive:** Matching is case-insensitive to ensure reliable detection on Windows.
-
-## AI Features
-
-PastePaw integrates powerful AI capabilities to help you process your clipboard content more efficiently.
-
-- **Actions:** Right-click any clip to access AI actions:
-    - **Summarize:** Get a concise summary of long texts.
-    - **Translate:** Translate content to your preferred language.
-    - **Explain Code:** Understand complex code snippets instantly.
-    - **Fix Grammar:** Polishing your writing with professional grammar checks.
-- **Full Customization:**
-    - **Custom Names:** Rename AI actions in Settings (e.g., change "Translate" to "To Spanish").
-    - **Custom Prompts:** Override default system prompts to tailor the AI's behavior and output style.
-    - **Provider Support:** Support for OpenAI, DeepSeek, and other OpenAI-compatible APIs.
 
 ## Tech Stack
 

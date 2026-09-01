@@ -4,12 +4,21 @@ All notable changes to PastePaw will be documented in this file.
 
 ## v1.4.4
 
+### Security & Offline Hardening
+- **Fully Offline Runtime**: PastePaw is now designed to operate 100% offline at runtime with zero outbound network calls.
+- **Removed Telemetry (Aptabase)**: Completely removed the Aptabase plugin, startup telemetry events, capability permissions, and SDK dependencies.
+- **Removed Automatic Updater & Network Checks**: Completely removed the Tauri Updater plugin, updater capabilities, updater signing workflows, and update check UI.
+- **Removed Cloud & AI Networking Code**: Cleaned up all legacy AI API dependencies, prompts, and locale strings.
+- **Sanitized Logging & Privacy Hardening**: Prohibited logging raw clipboard content, previews, and user directory paths; only character counts and non-sensitive metadata are logged.
+- **Hardened Release Log Level**: Configured release builds to default to `Info` level while preserving `Debug` logging for development builds.
+- **Enforced Content Security Policy (CSP)**: Added strict CSP headers (`connect-src 'none'`, `default-src 'self'`) blocking unauthorized network connections in the WebView.
+- **Least-Privilege Tauri Capabilities**: Removed unused plugins and capabilities (`opener`, `process`, `updater`, `aptabase`), disabled `withGlobalTauri`, and pruned unused npm/Rust dependencies (`reqwest`, `@tauri-apps/plugin-process`, `@tauri-apps/plugin-opener`, `@tauri-apps/plugin-updater`, `@tauri-apps/plugin-clipboard-manager`).
+
 ### Upgrade Notice
 - **Manual Upgrade Recommended for v1.4.3 and Earlier**: Due to the migration of the application identifier to `io.github.kisesaki.pastepaw`, auto-update from v1.4.3 is not supported (v1.4.3 still targets the upstream updater endpoint and signature key). When upgrading from v1.4.3 or earlier versions of this fork, please uninstall the previous version before installing v1.4.4. All core user data (clipboard history, pins, notes, images) is safely stored in `%APPDATA%\PastePaw` and will not be deleted during uninstallation. Existing application settings will also be migrated automatically upon first launch.
 
 ### Changed
 - **Independent Application Identifier**: Migrated Tauri application identifier from `me.xueshi.pastepaw` to `io.github.kisesaki.pastepaw`, establishing an independent identity for this fork.
-- **Fork Updater Endpoint & Keyring**: Pointed auto-updater endpoint to `KiseSaki/PastePaw` releases and established a dedicated Tauri Updater signature key for future releases.
 - **CLI Dependency Upgrade**: Upgraded `@tauri-apps/cli` to `2.11.4`.
 
 ### Fixed & Migration
@@ -18,12 +27,21 @@ All notable changes to PastePaw will be documented in this file.
 ### CI & Release
 - **Cleaned Upstream Release Workflows**: Removed upstream Winget publishing job (`XueshiQiao.PastePaw`) and Apps Gallery repository dispatch (`XueshiQiao/XueshiQiao.github.io`) from GitHub Actions workflows.
 
+### 安全与离线化加固
+- **运行时完全离线**：PastePaw 运行时设计为 100% 纯本地离线运行，消除所有主动外连网络请求。
+- **彻底移除 Aptabase 遥测**：移除 `tauri-plugin-aptabase` 插件初始化、启动追踪事件、对应 capability 权限与依赖包。
+- **彻底移除自动更新联网功能**：移除 Tauri Updater 插件、检查更新 UI、更新能力配置以及 CI 中的 Updater 签名密钥依赖。
+- **清理云端/AI 网络遗留代码**：彻底移除所有 AI API 相关依赖、提示词与多语言废弃文案。
+- **日志隐私加固**：严禁在日志中输出剪贴板实际内容、文本预览与敏感用户目录路径，仅记录字符长度与基础元数据。
+- **正式版日志等级收紧**：正式发布版默认采用 `Info` 日志等级，开发调试版保留 `Debug` 日志。
+- **严格 CSP 安全策略**：引入 CSP 策略（包含 `connect-src 'none'`、`default-src 'self'`），在 WebView 层彻底阻断外部网络连接。
+- **最小化 Tauri 权限与依赖精简**：移除 `opener`、`process`、`updater`、`aptabase` 等权限，关闭 `withGlobalTauri`，清理无用 npm 与 Rust 依赖包（`reqwest`、`@tauri-apps/plugin-process`、`@tauri-apps/plugin-opener`、`@tauri-apps/plugin-updater`、`@tauri-apps/plugin-clipboard-manager`）。
+
 ### 升级说明
 - **v1.4.3 及更早版本建议手动重装**：因本次版本调整了应用内部 identifier，v1.4.3 仍使用旧版更新源与上游签名公钥，因此不支持从 v1.4.3 自动更新至 v1.4.4。从 v1.4.3 及更早的本 Fork 版本升级时，建议先卸载旧版再安装 v1.4.4。用户的剪贴板历史、收藏、便签、图片等核心数据均独立保存在 `%APPDATA%\PastePaw` 中，卸载程序不会删除这些数据；旧版设置也会在首次启动新版时自动平滑迁移。
 
 ### 变更
 - **独立应用标识符**：将 Tauri Application Identifier 从 `me.xueshi.pastepaw` 迁移为 `io.github.kisesaki.pastepaw`，确立当前 Fork 独立的系统应用身份。
-- **独立更新源与签名链**：将自动更新源切换至 `KiseSaki/PastePaw`，并建立当前 Fork 专属的 Tauri Updater 签名公钥链（v1.4.4 将作为后续独立自动更新链的起点）。
 - **依赖版本升级**：升级 `@tauri-apps/cli` 至当前已验证的 `2.11.4`。
 
 ### 修复与迁移

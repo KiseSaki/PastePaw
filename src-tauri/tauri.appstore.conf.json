@@ -38,10 +38,5 @@
                 "embedded.provisionprofile": "PastePaw.provisionprofile"
             }
         }
-    },
-    "plugins": {
-        "updater": {
-            "active": false
-        }
     }
 }

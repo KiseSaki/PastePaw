@@ -8,7 +8,6 @@ use tauri::{
     tray::{TrayIcon, TrayIconBuilder},
     Emitter, Manager,
 };
-use tauri_plugin_aptabase::EventTracker;
 #[cfg(not(feature = "app-store"))]
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -45,6 +44,12 @@ pub fn run_app() {
 
     let db_arc = Arc::new(db);
 
+    let level_filter = if cfg!(debug_assertions) {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+
     let mut log_builder = tauri_plugin_log::Builder::default()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -55,7 +60,7 @@ pub fn run_app() {
                 message
             ))
         })
-        .level(log::LevelFilter::Debug)
+        .level(level_filter)
         .level_for("sqlx", log::LevelFilter::Warn);
 
     #[cfg(debug_assertions)]
@@ -79,12 +84,10 @@ pub fn run_app() {
 
     #[cfg(not(feature = "app-store"))]
     {
-        builder = builder
-            .plugin(tauri_plugin_autostart::init(
-                MacosLauncher::LaunchAgent,
-                Some(vec!["--flag1", "--flag2"]),
-            ))
-            .plugin(tauri_plugin_updater::Builder::new().build());
+        builder = builder.plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec!["--flag1", "--flag2"]),
+        ));
     }
 
     builder
@@ -104,9 +107,6 @@ pub fn run_app() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_x::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_aptabase::Builder::new("A-US-2920723583").build())
         .manage(db_arc.clone())
         .on_window_event(|window, event| {
             match event {
@@ -170,10 +170,9 @@ pub fn run_app() {
             });
             app.manage(Arc::new(settings_manager));
 
-            let _ = app.track_event("startup", None);
-            log::info!("Database path: {}", db_path_str);
+            log::debug!("Database path: {}", db_path_str);
             if let Ok(log_dir) = app.path().app_log_dir() {
-                log::info!("Log directory: {:?}", log_dir);
+                log::debug!("Log directory: {:?}", log_dir);
             }
             let handle = app.handle().clone();
             let db_for_clipboard = db_arc.clone();

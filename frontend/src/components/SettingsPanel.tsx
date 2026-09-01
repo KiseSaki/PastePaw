@@ -1,29 +1,26 @@
-import { Settings, FolderItem } from '../types';
-import {
-  X,
-  Trash2,
-  Plus,
-  FolderOpen,
-  Settings as SettingsIcon,
-  Folder as FolderIcon,
-  MoreHorizontal,
-} from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { useTheme } from '../hooks/useTheme';
-import { useTranslation } from 'react-i18next';
+import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
-import { FlaskConical } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { getVersion } from '@tauri-apps/api/app';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { check } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
+import { clsx } from 'clsx';
+import {
+    FlaskConical,
+    Folder as FolderIcon,
+    FolderOpen,
+    MoreHorizontal,
+    Plus,
+    Settings as SettingsIcon,
+    Trash2,
+    X,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useShortcutRecorder } from 'use-shortcut-recorder';
+import { useTheme } from '../hooks/useTheme';
+import { FolderItem, Settings } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Select } from './ui/Select';
-import { useShortcutRecorder } from 'use-shortcut-recorder';
-import { clsx } from 'clsx';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -293,38 +290,6 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
     stopRecordingLib();
     clearLastRecording();
     setIsRecordingMode(false);
-  };
-
-  const handleCheckUpdate = async () => {
-    try {
-      const loadingToast = toast.loading('Checking for updates...');
-      const update = await check();
-      toast.dismiss(loadingToast);
-
-      if (update && update.available) {
-        toast.info(`Update v${update.version} available!`, {
-          duration: 10000,
-          action: {
-            label: 'Download & Restart',
-            onClick: async () => {
-              try {
-                const dlToast = toast.loading(`Downloading v${update.version}...`);
-                await update.downloadAndInstall();
-                toast.dismiss(dlToast);
-                toast.success('Update installed. Restarting...');
-                await relaunch();
-              } catch (e) {
-                toast.error(`Update failed: ${e}`);
-              }
-            },
-          },
-        });
-      } else {
-        toast.success('You are on the latest version.');
-      }
-    } catch (e) {
-      toast.error(`Check failed: ${e}`);
-    }
   };
 
   return (
@@ -881,26 +846,12 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
 
         {/* Footer */}
         <div className="flex flex-col items-center gap-1 border-t border-border bg-background px-4 py-3 text-center">
-          <button
-            onClick={() => openUrl('https://github.com/XueshiQiao/PastePaw').catch(console.error)}
-            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            PastePaw {appVersion || '...'}
-          </button>
-          <div className="flex gap-2 text-xs text-muted-foreground">
-            <a
-              href="https://pastepaw.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              © 2026 PastePaw
-            </a>
-            <span>•</span>
-            <button onClick={handleCheckUpdate} className="underline hover:text-foreground">
-              {t('settings.checkForUpdates')}
-            </button>
-          </div>
+          <span className="text-xs text-muted-foreground">
+            PastePaw {appVersion ? `v${appVersion}` : ''}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            © 2026 PastePaw • Local & Offline
+          </span>
         </div>
       </div>
     </>

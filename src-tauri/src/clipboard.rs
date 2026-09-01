@@ -227,7 +227,7 @@ async fn process_clipboard_change(
                 clip_type = "text";
                 clip_preview = text.chars().take(200).collect::<String>();
                 found_content = true;
-                log::debug!("CLIPBOARD: Found text: {}", clip_preview);
+                log::debug!("CLIPBOARD: text captured, length={}", text.chars().count());
             }
         }
     }
@@ -252,9 +252,8 @@ async fn process_clipboard_change(
         let mut lock = IGNORE_HASH.lock();
         if let Some(ignore_hash) = lock.take() {
             if ignore_hash == clip_hash {
-                log::info!(
-                    "CLIPBOARD: Detected self-paste for hash {}, proceeding to update timestamp",
-                    ignore_hash
+                log::debug!(
+                    "CLIPBOARD: Detected self-paste, proceeding to update timestamp"
                 );
             }
         }
@@ -262,11 +261,10 @@ async fn process_clipboard_change(
 
     // Source app info was captured at event time (before debounce) to avoid race conditions
     let (source_app, source_icon, exe_name, full_path, is_explicit_owner) = source_app_info;
-    log::info!(
-        "CLIPBOARD: Source app: {:?}, exe_name: {:?}, full_path: {:?}, explicit: {}",
+    log::debug!(
+        "CLIPBOARD: Source app: {:?}, exe_name: {:?}, explicit: {}",
         source_app,
         exe_name,
-        full_path,
         is_explicit_owner
     );
 
@@ -277,7 +275,7 @@ async fn process_clipboard_change(
     let settings = manager.get();
 
     if settings.ignore_ghost_clips && !is_explicit_owner {
-        log::info!("CLIPBOARD: Ignoring ghost clip (unknown owner)");
+        log::debug!("CLIPBOARD: Ignoring ghost clip (unknown owner)");
         return;
     }
 
@@ -292,20 +290,14 @@ async fn process_clipboard_change(
 
     if let Some(ref path) = full_path {
         if is_ignored(path) {
-            log::info!(
-                "CLIPBOARD: Ignoring content from ignored app (path match): {}",
-                path
-            );
+            log::debug!("CLIPBOARD: Ignoring content from ignored app (path match)");
             return;
         }
     }
 
     if let Some(ref exe) = exe_name {
         if is_ignored(exe) {
-            log::info!(
-                "CLIPBOARD: Ignoring content from ignored app (exe match): {}",
-                exe
-            );
+            log::debug!("CLIPBOARD: Ignoring content from ignored app (exe match)");
             return;
         }
     }
@@ -530,14 +522,14 @@ fn get_clipboard_owner_app_info() -> (
         let (hwnd, is_explicit) = match GetClipboardOwner() {
             Ok(h) if !h.0.is_null() => (h, true),
             Err(e) => {
-                log::info!(
+                log::debug!(
                     "CLIPBOARD: GetClipboardOwner failed: {:?}, falling back to foreground window",
                     e
                 );
                 (GetForegroundWindow(), false)
             }
             Ok(_) => {
-                log::info!(
+                log::debug!(
                     "CLIPBOARD: GetClipboardOwner returned null, falling back to foreground window"
                 );
                 (GetForegroundWindow(), false)
@@ -843,7 +835,7 @@ unsafe fn extract_icon(path: &str) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 pub fn send_paste_input() {
-    log::info!("send_paste_input: sending Ctrl+V");
+    log::debug!("send_paste_input: sending Ctrl+V");
     unsafe {
         let vk_v = VIRTUAL_KEY(0x56);
         let inputs = [
@@ -888,6 +880,6 @@ pub fn send_paste_input() {
         ];
 
         let result = SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        log::info!("send_paste_input: SendInput returned {}", result);
+        log::debug!("send_paste_input: SendInput returned {}", result);
     }
 }

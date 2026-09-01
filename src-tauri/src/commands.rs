@@ -273,7 +273,7 @@ async fn load_full_image_content(pool: &SqlitePool, clip: &mut Clip) -> Result<V
                 return Ok(bytes);
             }
             // If file missing, try fallbacks below
-            log::warn!("Image file missing at {}, checking DB backups...", path);
+            log::warn!("Image file missing for clip {}, checking DB backups...", clip.uuid);
         }
     }
 

@@ -22,18 +22,6 @@
     "global-shortcut:default",
     "clipboard-x:default",
     "log:default",
-    "opener:default",
-    "updater:default",
-    "process:default",
-    "aptabase:default",
-    "notification:default",
-    {
-      "identifier": "opener:allow-open-url",
-      "allow": [
-        {
-          "url": "https://github.com/XueshiQiao/PastePaw"
-        }
-      ]
-    }
+    "notification:default"
   ]
 }

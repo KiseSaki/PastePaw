@@ -1,21 +1,20 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { openUrl } from '@tauri-apps/plugin-opener';
-import { ClipboardItem as AppClipboardItem, FolderItem, Settings, SortMode } from './types';
-import { ClipList } from './components/ClipList';
-import { ControlBar } from './components/ControlBar';
-import { DragPreview } from './components/DragPreview';
-import { ContextMenu } from './components/ContextMenu';
-import { FolderModal } from './components/FolderModal';
-import { useKeyboard } from './hooks/useKeyboard';
-import { useTheme } from './hooks/useTheme';
-import { useLanguage } from './hooks/useLanguage';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Toaster, toast } from 'sonner';
+import { ClipList } from './components/ClipList';
+import { ContextMenu } from './components/ContextMenu';
+import { ControlBar } from './components/ControlBar';
+import { DragPreview } from './components/DragPreview';
+import { FolderModal } from './components/FolderModal';
 import { LAYOUT } from './constants';
 import { generateDemoClips } from './debug/demoData';
+import { useKeyboard } from './hooks/useKeyboard';
+import { useLanguage } from './hooks/useLanguage';
+import { useTheme } from './hooks/useTheme';
+import { ClipboardItem as AppClipboardItem, FolderItem, Settings, SortMode } from './types';
 
 const base64ToBlob = (base64: string, mimeType: string = 'image/png'): Blob => {
   const byteCharacters = atob(base64);
@@ -760,14 +759,6 @@ function App() {
 
                 if (targetClip) {
                   const text = targetClip.content.trim();
-
-                  // Smart Action: Open URL
-                  if (/^https?:\/\/[^\s]+$/i.test(text)) {
-                    menuOptions.push({
-                      label: t('contextMenu.openUrl'),
-                      onClick: () => openUrl(text),
-                    });
-                  }
 
                   // Smart Action: Format JSON
                   if (
