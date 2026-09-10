@@ -63,6 +63,7 @@ export interface NoteItem {
   content: string;
   color: string;
   is_pinned: boolean;
+  is_completed: boolean;
   created_at: string;
   updated_at: string;
 }

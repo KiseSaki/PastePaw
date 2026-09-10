@@ -14,6 +14,8 @@ import StarterKit from '@tiptap/starter-kit';
 import { clsx } from 'clsx';
 import {
   Bold as BoldIcon,
+  CheckCircle2,
+  CircleDot,
   Clock,
   Code as CodeIcon,
   Copy,
@@ -36,7 +38,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Toaster, toast } from 'sonner';
 import { useLanguage } from '../hooks/useLanguage';
@@ -240,6 +242,8 @@ export function NotepadWindow() {
   const [content, setContent] = useState('');
   const [color, setColor] = useState('default');
   const [isPinned, setIsPinned] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'active' | 'completed'>('active');
   const [isSaving, setIsSaving] = useState(false);
 
   const activeNoteRef = useRef<NoteItem | null>(null);
@@ -492,6 +496,7 @@ export function NotepadWindow() {
       setColor(note.color || 'default');
       colorRef.current = note.color || 'default';
       setIsPinned(note.is_pinned);
+      setIsCompleted(Boolean(note.is_completed));
       if (editor && !editor.isDestroyed) {
         editor.commands.setContent(ensureHtmlContent(note.content), { emitUpdate: false });
         resetEditorHistory(editor);
@@ -625,6 +630,95 @@ export function NotepadWindow() {
       console.error('Failed to toggle pin:', err);
     }
   };
+
+  // Toggle Complete
+  const handleToggleComplete = async (id: string) => {
+    try {
+      const newCompleted = await invoke<boolean>('toggle_complete_note', { id });
+      setNotes((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_completed: newCompleted } : n))
+      );
+      if (selectedNoteId === id) {
+        setIsCompleted(newCompleted);
+      }
+      toast.success(newCompleted ? t('notepad.completed') : t('notepad.activeNotes'));
+    } catch (err) {
+      console.error('Failed to toggle complete:', err);
+    }
+  };
+
+  // Clear Completed Notes
+  const handleClearCompleted = async () => {
+    if (!window.confirm(t('notepad.clearCompletedConfirm'))) return;
+    try {
+      const count = await invoke<number>('clear_completed_notes');
+      setNotes((prev) => {
+        const remaining = prev.filter((n) => !n.is_completed);
+        if (activeNoteRef.current?.is_completed) {
+          if (remaining.length > 0) {
+            selectNote(remaining[0]);
+          } else {
+            handleCreateNote();
+          }
+        }
+        return remaining;
+      });
+      toast.success(`${t('notepad.clearCompleted')}: ${count}`);
+    } catch (err) {
+      console.error('Failed to clear completed notes:', err);
+    }
+  };
+
+  // Parse task completion progress for preview
+  const getNoteTaskProgress = useCallback((contentStr: string) => {
+    if (
+      !contentStr ||
+      (!contentStr.includes('taskItem') &&
+        !contentStr.includes('[ ]') &&
+        !contentStr.includes('[x]') &&
+        !contentStr.includes('[X]'))
+    ) {
+      return null;
+    }
+    const htmlMatches = contentStr.match(/<li[^>]*data-type="taskItem"[^>]*>/gi);
+    if (htmlMatches && htmlMatches.length > 0) {
+      const checkedMatches =
+        contentStr.match(/<li[^>]*data-type="taskItem"[^>]*data-checked="true"[^>]*>/gi) || [];
+      return {
+        checked: checkedMatches.length,
+        total: htmlMatches.length,
+      };
+    }
+    const mdMatches = contentStr.match(/\[([ xX])\]/g);
+    if (mdMatches && mdMatches.length > 0) {
+      const mdChecked = contentStr.match(/\[[xX]\]/g) || [];
+      return {
+        checked: mdChecked.length,
+        total: mdMatches.length,
+      };
+    }
+    return null;
+  }, []);
+
+  const activeCount = useMemo(() => notes.filter((n) => !n.is_completed).length, [notes]);
+  const completedCount = useMemo(() => notes.filter((n) => n.is_completed).length, [notes]);
+
+  const filteredNotes = useMemo(() => {
+    return notes.filter((note) => {
+      // 1. Completion filter
+      if (filterStatus === 'active' && note.is_completed) return false;
+      if (filterStatus === 'completed' && !note.is_completed) return false;
+
+      // 2. Query filter
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      const titleMatch = (note.title || '').toLowerCase().includes(q);
+      const contentMatch = extractPlainTextPreview(note.content, 9999)
+        .toLowerCase()
+        .includes(q);
+      return titleMatch || contentMatch;
+    });
+  }, [notes, filterStatus, searchQuery]);
 
   // Copy full note (serialized as Markdown)
   const handleCopyAll = async () => {
@@ -763,6 +857,13 @@ export function NotepadWindow() {
         e.preventDefault();
         handleCopyAll();
       }
+      // Ctrl+D: Toggle Complete
+      if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        if (selectedNoteId) {
+          handleToggleComplete(selectedNoteId);
+        }
+      }
       // Ctrl+Enter: Paste to app
       if (e.ctrlKey && e.key === 'Enter') {
         e.preventDefault();
@@ -777,7 +878,7 @@ export function NotepadWindow() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [content, handleCreateNote]);
+  }, [content, handleCreateNote, selectedNoteId, handleToggleComplete]);
 
   const currentColorObj = NOTE_COLORS.find((c) => c.id === color) || NOTE_COLORS[0];
   const plainText = extractPlainTextPreview(content, 999999);
@@ -924,6 +1025,43 @@ export function NotepadWindow() {
                     />
                   </div>
 
+                  {/* Active / Completed Tabs */}
+                  <div className="flex items-center gap-1 rounded-md bg-muted/60 p-0.5 text-[11px]">
+                    <button
+                      onClick={() => setFilterStatus('active')}
+                      className={clsx(
+                        'flex flex-1 items-center justify-center gap-1 rounded py-1 font-medium transition-colors',
+                        filterStatus === 'active'
+                          ? 'bg-background text-amber-500 shadow-xs font-semibold'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <span>{t('notepad.activeNotes')}</span>
+                      <span className="text-[10px] opacity-70">({activeCount})</span>
+                    </button>
+                    <button
+                      onClick={() => setFilterStatus('completed')}
+                      className={clsx(
+                        'flex flex-1 items-center justify-center gap-1 rounded py-1 font-medium transition-colors',
+                        filterStatus === 'completed'
+                          ? 'bg-background text-amber-500 shadow-xs font-semibold'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <span>{t('notepad.completedNotes')}</span>
+                      <span className="text-[10px] opacity-70">({completedCount})</span>
+                    </button>
+                    {filterStatus === 'completed' && completedCount > 0 && (
+                      <button
+                        onClick={handleClearCompleted}
+                        title={t('notepad.clearCompleted')}
+                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+
                   <button
                     onClick={handleCreateNote}
                     title="Ctrl+N"
@@ -934,8 +1072,8 @@ export function NotepadWindow() {
                   </button>
                 </>
               ) : (
-                /* Mini Mode Top Button */
-                <div className="flex flex-col items-center gap-1">
+                /* Mini Mode Top Button & Filters */
+                <div className="flex flex-col items-center gap-1.5">
                   <button
                     onClick={handleCreateNote}
                     title={`${t('notepad.newNote')} (Ctrl+N)`}
@@ -943,21 +1081,53 @@ export function NotepadWindow() {
                   >
                     <Plus size={15} />
                   </button>
+                  <div className="flex flex-col items-center gap-1">
+                    <button
+                      onClick={() => setFilterStatus('active')}
+                      title={`${t('notepad.activeNotes')} (${activeCount})`}
+                      className={clsx(
+                        'flex h-6 w-6 items-center justify-center rounded transition-colors',
+                        filterStatus === 'active'
+                          ? 'bg-amber-500/20 text-amber-500 font-bold'
+                          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      )}
+                    >
+                      <CircleDot size={13} />
+                    </button>
+                    <button
+                      onClick={() => setFilterStatus('completed')}
+                      title={`${t('notepad.completedNotes')} (${completedCount})`}
+                      className={clsx(
+                        'flex h-6 w-6 items-center justify-center rounded transition-colors',
+                        filterStatus === 'completed'
+                          ? 'bg-amber-500/20 text-amber-500 font-bold'
+                          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      )}
+                    >
+                      <CheckCircle2 size={13} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Notes List */}
             <div className="no-scrollbar flex-1 space-y-1 overflow-y-auto p-1.5">
-              {notes.length === 0 ? (
+              {filteredNotes.length === 0 ? (
                 <div className="flex h-32 flex-col items-center justify-center px-1 text-center">
                   <StickyNote size={20} className="mb-1 text-muted-foreground/40" />
                   {!isMini && (
-                    <p className="text-xs text-muted-foreground">{t('notepad.noNotes')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {filterStatus === 'completed'
+                        ? t('notepad.noCompletedNotes')
+                        : filterStatus === 'active' && notes.length > 0
+                        ? t('notepad.noActiveNotes')
+                        : t('notepad.noNotes')}
+                    </p>
                   )}
                 </div>
               ) : (
-                notes.map((note) => {
+                filteredNotes.map((note) => {
                   const isSelected = selectedNoteId === note.id;
                   const colorObj = NOTE_COLORS.find((c) => c.id === note.color) || NOTE_COLORS[0];
                   const cleanExplicitTitle =
@@ -969,6 +1139,7 @@ export function NotepadWindow() {
                     extractPlainTextPreview(note.content, 40) ||
                     t('notepad.untitled');
                   const noteSnippet = extractPlainTextPreview(note.content) || `(${t('notepad.empty')})`;
+                  const taskProgress = getNoteTaskProgress(note.content);
 
                   if (isMini) {
                     // Mini Icon Mode
@@ -987,15 +1158,21 @@ export function NotepadWindow() {
                         <span
                           className={clsx(
                             'h-3.5 w-3.5 rounded-full ring-1 ring-border/50',
-                            colorObj.dot
+                            colorObj.dot,
+                            note.is_completed && 'opacity-60'
                           )}
                         />
-                        {note.is_pinned && (
+                        {note.is_pinned ? (
                           <Pin
                             size={8}
                             className="absolute right-0.5 top-0.5 fill-amber-500 text-amber-500"
                           />
-                        )}
+                        ) : note.is_completed ? (
+                          <CheckCircle2
+                            size={9}
+                            className="absolute right-0.5 top-0.5 text-emerald-500"
+                          />
+                        ) : null}
                       </div>
                     );
                   }
@@ -1011,18 +1188,31 @@ export function NotepadWindow() {
                           'group relative flex cursor-pointer items-center justify-between rounded-lg border p-1.5 text-left transition-all',
                           isSelected
                             ? 'border-amber-500/50 bg-accent/90 shadow-sm'
-                            : 'border-transparent hover:border-border/40 hover:bg-accent/40'
+                            : 'border-transparent hover:border-border/40 hover:bg-accent/40',
+                          note.is_completed && 'opacity-70'
                         )}
                       >
                         <div className="flex min-w-0 items-center gap-1.5 truncate">
                           <span className={clsx('h-2 w-2 shrink-0 rounded-full', colorObj.dot)} />
-                          <span className="truncate text-xs font-medium text-foreground/90">
+                          <span
+                            className={clsx(
+                              'truncate text-xs font-medium text-foreground/90',
+                              note.is_completed && 'line-through text-muted-foreground'
+                            )}
+                          >
                             {noteTitle}
                           </span>
                         </div>
-                        {note.is_pinned && (
-                          <Pin size={10} className="shrink-0 fill-amber-500 text-amber-500" />
-                        )}
+                        <div className="flex shrink-0 items-center gap-1">
+                          {taskProgress && (
+                            <span className="text-[10px] font-mono text-muted-foreground/70">
+                              {taskProgress.checked}/{taskProgress.total}
+                            </span>
+                          )}
+                          {note.is_pinned && (
+                            <Pin size={10} className="shrink-0 fill-amber-500 text-amber-500" />
+                          )}
+                        </div>
                       </div>
                     );
                   }
@@ -1036,22 +1226,47 @@ export function NotepadWindow() {
                         'group relative flex cursor-pointer flex-col gap-0.5 rounded-lg border p-2 text-left transition-all',
                         isSelected
                           ? 'border-amber-500/50 bg-accent/90 shadow-sm'
-                          : 'border-transparent hover:border-border/40 hover:bg-accent/40'
+                          : 'border-transparent hover:border-border/40 hover:bg-accent/40',
+                        note.is_completed && 'opacity-75'
                       )}
                     >
                       <div className="flex items-center justify-between gap-1">
                         <div className="flex min-w-0 items-center gap-1.5">
                           <span className={clsx('h-2 w-2 shrink-0 rounded-full', colorObj.dot)} />
-                          <span className="truncate text-xs font-semibold text-foreground/90">
+                          <span
+                            className={clsx(
+                              'truncate text-xs font-semibold text-foreground/90',
+                              note.is_completed && 'line-through text-muted-foreground'
+                            )}
+                          >
                             {noteTitle}
                           </span>
                         </div>
-                        {note.is_pinned && (
-                          <Pin size={10} className="shrink-0 fill-amber-500 text-amber-500" />
-                        )}
+                        <div className="flex shrink-0 items-center gap-1">
+                          {taskProgress && (
+                            <span
+                              className={clsx(
+                                'flex items-center gap-0.5 rounded px-1 text-[10px] font-mono font-medium',
+                                taskProgress.checked === taskProgress.total
+                                  ? 'bg-emerald-500/15 text-emerald-500'
+                                  : 'bg-muted/80 text-muted-foreground'
+                              )}
+                            >
+                              ✓ {taskProgress.checked}/{taskProgress.total}
+                            </span>
+                          )}
+                          {note.is_pinned && (
+                            <Pin size={10} className="shrink-0 fill-amber-500 text-amber-500" />
+                          )}
+                        </div>
                       </div>
 
-                      <p className="line-clamp-2 break-all text-[11px] leading-relaxed text-muted-foreground/80">
+                      <p
+                        className={clsx(
+                          'line-clamp-2 break-all text-[11px] leading-relaxed text-muted-foreground/80',
+                          note.is_completed && 'line-through opacity-70'
+                        )}
+                      >
                         {noteSnippet}
                       </p>
 
@@ -1062,6 +1277,25 @@ export function NotepadWindow() {
                         </span>
 
                         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleComplete(note.id);
+                            }}
+                            title={
+                              note.is_completed
+                                ? t('notepad.markAsActive')
+                                : t('notepad.markAsCompleted')
+                            }
+                            className={clsx(
+                              'p-0.5 transition-colors',
+                              note.is_completed
+                                ? 'text-emerald-500 hover:text-emerald-600'
+                                : 'hover:text-emerald-500'
+                            )}
+                          >
+                            <CheckCircle2 size={11} />
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1127,14 +1361,24 @@ export function NotepadWindow() {
                 : 'h-0 border-b-0 px-3 py-0 opacity-0 overflow-hidden pointer-events-none'
             )}
           >
-            {/* Title Input */}
-            <input
-              type="text"
-              placeholder={t('notepad.titlePlaceholder')}
-              value={title}
-              onChange={handleTitleChange}
-              className="mr-2 min-w-0 flex-1 truncate bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground/40"
-            />
+            {/* Title Input & Status Badge */}
+            <div className="mr-2 flex min-w-0 flex-1 items-center gap-1.5">
+              <input
+                type="text"
+                placeholder={t('notepad.titlePlaceholder')}
+                value={title}
+                onChange={handleTitleChange}
+                className={clsx(
+                  'min-w-0 flex-1 truncate bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground/40',
+                  isCompleted && 'line-through text-muted-foreground/70'
+                )}
+              />
+              {isCompleted && (
+                <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-500">
+                  {t('notepad.completed')}
+                </span>
+              )}
+            </div>
 
             {/* Quick Markdown Format Buttons */}
             {editor && (
@@ -1232,6 +1476,24 @@ export function NotepadWindow() {
               ))}
 
               <div className="mx-1 h-3.5 w-[1px] shrink-0 bg-border/40" />
+
+              {/* Complete / Restore Note */}
+              <button
+                onClick={() => selectedNoteId && handleToggleComplete(selectedNoteId)}
+                title={
+                  isCompleted
+                    ? t('notepad.markAsActive')
+                    : `${t('notepad.markAsCompleted')} (Ctrl+D)`
+                }
+                className={clsx(
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors',
+                  isCompleted
+                    ? 'bg-emerald-500/20 text-emerald-500'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                )}
+              >
+                <CheckCircle2 size={13} className={isCompleted ? 'stroke-[2.5]' : ''} />
+              </button>
 
               {/* Pin Note */}
               <button

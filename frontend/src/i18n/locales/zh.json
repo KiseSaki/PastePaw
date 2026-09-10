@@ -170,6 +170,16 @@
     "code": "行内代码",
     "divider": "分隔线",
     "heading1": "大标题",
-    "heading2": "中标题"
+    "heading2": "中标题",
+    "activeNotes": "进行中",
+    "completedNotes": "已完成",
+    "allNotes": "全部",
+    "markAsCompleted": "标记为已完成",
+    "markAsActive": "恢复为进行中",
+    "completed": "已完成",
+    "clearCompleted": "清空已完成",
+    "clearCompletedConfirm": "确定要清空所有已完成的便签吗？此操作无法撤销。",
+    "noCompletedNotes": "暂无已完成便签",
+    "noActiveNotes": "暂无进行中便签"
   }
 }

@@ -156,6 +156,7 @@ impl Database {
                 content TEXT NOT NULL,
                 color TEXT DEFAULT 'default',
                 is_pinned INTEGER DEFAULT 0,
+                is_completed INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -164,9 +165,24 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
+        // Migration: add is_completed column if it doesn't exist for existing databases
+        let _ = add_column_if_missing(
+            &self.pool,
+            "ALTER TABLE notes ADD COLUMN is_completed INTEGER DEFAULT 0;",
+        )
+        .await;
+
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_notes_pinned ON notes(is_pinned);
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_notes_completed ON notes(is_completed);
             "#,
         )
         .execute(&self.pool)

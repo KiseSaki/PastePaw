@@ -121,6 +121,7 @@ pub struct Note {
     pub content: String,
     pub color: Option<String>,
     pub is_pinned: bool,
+    pub is_completed: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -132,6 +133,7 @@ pub struct NoteItem {
     pub content: String,
     pub color: String,
     pub is_pinned: bool,
+    pub is_completed: bool,
     pub created_at: String,
     pub updated_at: String,
 }

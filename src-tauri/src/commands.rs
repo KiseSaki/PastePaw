@@ -28,6 +28,7 @@ fn note_to_item(note: &Note) -> NoteItem {
         content: note.content.clone(),
         color: note.color.clone().unwrap_or_else(|| "default".to_string()),
         is_pinned: note.is_pinned,
+        is_completed: note.is_completed,
         created_at: note.created_at.to_rfc3339(),
         updated_at: note.updated_at.to_rfc3339(),
     }
@@ -1261,8 +1262,8 @@ pub async fn create_note(
 
     sqlx::query(
         r#"
-        INSERT INTO notes (uuid, title, content, color, is_pinned, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO notes (uuid, title, content, color, is_pinned, is_completed, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         "#,
     )
     .bind(&uuid)
@@ -1385,6 +1386,61 @@ pub async fn toggle_pin_note(
         }
         None => Err("Note not found".to_string()),
     }
+}
+
+#[tauri::command]
+pub async fn toggle_complete_note(
+    id: String,
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<bool, String> {
+    let pool = &db.pool;
+    let current_completed: Option<bool> =
+        sqlx::query_scalar(r#"SELECT is_completed FROM notes WHERE uuid = ?"#)
+            .bind(&id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    match current_completed {
+        Some(is_completed) => {
+            let new_completed = !is_completed;
+            sqlx::query(
+                r#"UPDATE notes SET is_completed = ?, updated_at = CURRENT_TIMESTAMP WHERE uuid = ?"#,
+            )
+            .bind(new_completed)
+            .bind(&id)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let _ = app.emit(
+                "notes-changed",
+                &serde_json::json!({ "id": id, "action": "toggle_complete", "is_completed": new_completed }),
+            );
+            Ok(new_completed)
+        }
+        None => Err("Note not found".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn clear_completed_notes(
+    app: AppHandle,
+    db: tauri::State<'_, Arc<Database>>,
+) -> Result<u64, String> {
+    let pool = &db.pool;
+    let result = sqlx::query(r#"DELETE FROM notes WHERE is_completed = 1"#)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let rows_affected = result.rows_affected();
+    let _ = app.emit(
+        "notes-changed",
+        &serde_json::json!({ "action": "clear_completed", "count": rows_affected }),
+    );
+    Ok(rows_affected)
 }
 
 #[tauri::command]

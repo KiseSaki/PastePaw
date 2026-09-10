@@ -170,6 +170,16 @@
     "code": "Inline Code",
     "divider": "Divider",
     "heading1": "Heading 1",
-    "heading2": "Heading 2"
+    "heading2": "Heading 2",
+    "activeNotes": "Active",
+    "completedNotes": "Completed",
+    "allNotes": "All",
+    "markAsCompleted": "Mark as completed",
+    "markAsActive": "Restore to active",
+    "completed": "Completed",
+    "clearCompleted": "Clear completed",
+    "clearCompletedConfirm": "Are you sure you want to clear all completed notes? This action cannot be undone.",
+    "noCompletedNotes": "No completed notes",
+    "noActiveNotes": "No active notes"
   }
 }

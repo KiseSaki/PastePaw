@@ -360,6 +360,8 @@ pub fn run_app() {
             commands::update_note,
             commands::delete_note,
             commands::toggle_pin_note,
+            commands::toggle_complete_note,
+            commands::clear_completed_notes,
             commands::save_clip_as_note,
             commands::paste_note,
             commands::open_notepad_window,
