@@ -2,6 +2,18 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.6
+
+### Fixed
+- **Cross-Note Undo and Data Isolation**: Resolved an issue where ProseMirror undo/redo history stacks lingered across different notes. Resetting the history state when switching or creating notes prevents pressing `Ctrl+Z` in a newly selected note from undoing back into a previously edited note.
+- **Debounced Auto-Save Race Condition**: Bound auto-save tasks strictly to the target note ID and flushed pending saves immediately upon switching or creating notes, preventing rapid note transitions from overwriting content across notes.
+- **Window Close & Deletion Guard**: Ensured unsaved pending note changes are flushed immediately when closing the notepad window or unmounting, and canceled pending auto-save tasks when a note is deleted.
+
+### 修复
+- **便签跨笔记撤销与状态隔离**：修复了 ProseMirror 编辑器历史栈在切换笔记时未清空导致的跨笔记撤销问题。在切换或新建笔记时彻底重置历史状态，防止在当前笔记中按 `Ctrl+Z` 意外撤销回退到上一篇笔记的内容。
+- **自动保存防抖并发与覆盖**：将自动保存任务严格绑定至目标笔记 ID，并在切换笔记或新建笔记时立即将上一篇笔记的未存修改冲刷落盘（`flushPendingSave`），彻底消除快速切换笔记时的防抖时间竞争与内容相互覆盖问题。
+- **窗口关闭与删除安全保障**：在便签窗口关闭或组件卸载时立即自动存盘未完成的修改；在删除笔记时同步清除对应的待存盘任务，杜绝数据遗留。
+
 ## v1.4.5
 
 ### Fixed

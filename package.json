@@ -1,6 +1,6 @@
 {
   "name": "pastepaw",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "packageManager": "pnpm@11.19.0",
   "description": "A beautiful clipboard history manager",
   "license": "GPL-3.0",
