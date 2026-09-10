@@ -259,8 +259,11 @@
   margin-bottom: 0.5rem !important;
 }
 
+.tiptap ul[data-type='taskList'] > li,
+.ProseMirror ul[data-type='taskList'] > li,
 .tiptap li[data-type='taskItem'],
-.ProseMirror li[data-type='taskItem'] {
+.ProseMirror li[data-type='taskItem'],
+li[data-checked] {
   display: flex !important;
   flex-direction: row !important;
   align-items: flex-start !important;
@@ -270,34 +273,55 @@
   line-height: 1.6 !important;
 }
 
+.tiptap ul[data-type='taskList'] > li > label,
+.ProseMirror ul[data-type='taskList'] > li > label,
 .tiptap li[data-type='taskItem'] > label,
-.ProseMirror li[data-type='taskItem'] > label {
+.ProseMirror li[data-type='taskItem'] > label,
+li[data-checked] > label {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   flex-shrink: 0 !important;
   user-select: none !important;
-  padding-top: 0.2rem !important;
+  padding-top: 0.25rem !important;
   cursor: pointer !important;
 }
 
+.tiptap ul[data-type='taskList'] > li > label input[type='checkbox'],
+.ProseMirror ul[data-type='taskList'] > li > label input[type='checkbox'],
 .tiptap li[data-type='taskItem'] > label input[type='checkbox'],
-.ProseMirror li[data-type='taskItem'] > label input[type='checkbox'] {
+.ProseMirror li[data-type='taskItem'] > label input[type='checkbox'],
+li[data-checked] > label input[type='checkbox'] {
   height: 1rem !important;
   width: 1rem !important;
   border-radius: 0.25rem !important;
   accent-color: #f59e0b !important;
   cursor: pointer !important;
+  margin: 0 !important;
 }
 
+.tiptap ul[data-type='taskList'] > li > div,
+.ProseMirror ul[data-type='taskList'] > li > div,
 .tiptap li[data-type='taskItem'] > div,
-.ProseMirror li[data-type='taskItem'] > div {
+.ProseMirror li[data-type='taskItem'] > div,
+li[data-checked] > div {
   flex: 1 1 0% !important;
   min-width: 0 !important;
 }
 
+.tiptap ul[data-type='taskList'] > li > div > p,
+.ProseMirror ul[data-type='taskList'] > li > div > p,
+.tiptap li[data-type='taskItem'] > div > p,
+.ProseMirror li[data-type='taskItem'] > div > p,
+li[data-checked] > div > p {
+  margin: 0 !important;
+}
+
+.tiptap ul[data-type='taskList'] > li[data-checked='true'] > div,
+.ProseMirror ul[data-type='taskList'] > li[data-checked='true'] > div,
 .tiptap li[data-type='taskItem'][data-checked='true'] > div,
-.ProseMirror li[data-type='taskItem'][data-checked='true'] > div {
+.ProseMirror li[data-type='taskItem'][data-checked='true'] > div,
+li[data-checked='true'] > div {
   text-decoration: line-through !important;
   opacity: 0.5 !important;
 }

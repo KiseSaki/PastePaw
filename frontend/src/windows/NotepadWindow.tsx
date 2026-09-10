@@ -343,9 +343,16 @@ export function NotepadWindow() {
           keepAttributes: false,
         },
       }),
-      TaskList,
+      TaskList.configure({
+        HTMLAttributes: {
+          'data-type': 'taskList',
+        },
+      }),
       CustomTaskItem.configure({
         nested: true,
+        HTMLAttributes: {
+          'data-type': 'taskItem',
+        },
       }),
       ListKeyboardExtension,
       Placeholder.configure({
