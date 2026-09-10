@@ -2,6 +2,28 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.7
+
+### Added
+- **Active & Completed Note Management**: Introduced full lifecycle status management for notepad notes. Users can now categorize notes as active or completed, keeping active tasks focused and noise-free.
+- **Sidebar Tab Segmentation**: Added pill-style filter tabs (`Active (N)` / `Completed (M)`) in the notepad sidebar with mini-mode icon support. Includes a one-click "Clear Completed" action with confirmation.
+- **Task List Progress Parsing**: Automatically parses task checkboxes (`[ ]` / `[x]`) within note content to display real-time completion badges (e.g. `✓ 2/3`) on note cards.
+- **Quick Status Toggle & Shortcut**: Added a status toggle button on note cards and the editor toolbar, along with a `Ctrl+D` shortcut to quickly mark notes as completed or active.
+- **Seamless Database Migration**: Automatically adds the `is_completed` column and index to the SQLite `notes` table without data loss or breaking existing user notes.
+
+### Fixed
+- **Task Item Checkbox & Text Alignment**: Fixed an issue where text entered in a task list item wrapped to the next line beneath the checkbox rather than aligning horizontally next to it. Enforced flexbox inline alignment and removed paragraph margin offset.
+
+### 新增
+- **便签「进行中 / 已完成」分类管理**：为记事本增加了便签生命周期管理支持，区分进行中与已完成便签，避免待办事项堆积干扰视线。
+- **侧边栏分段药丸过滤栏**：侧边栏顶部新增 `[进行中 (N)]` 与 `[已完成 (M)]` 过滤药丸标签（Mini 极窄模式自适应为小图标），并在已完成视图下提供“清空已完成”安全清理操作。
+- **待办清单进度智能感知**：自动解析便签文本中的待办复选框（`[ ]` / `[x]`），在侧边栏卡片上实时呈现完成度进度徽标（如 `✓ 2/3`，全部完成为高亮 `✓ 3/3`）。
+- **快捷切换状态与快捷键**：卡片悬浮操作栏与编辑器顶部工具栏均增加状态切换按钮，并支持快捷键 `Ctrl+D` 快速标记当前便签为完成或恢复。
+- **数据库平滑无损迁移**：SQLite `notes` 表自动新增 `is_completed` 字段及索引，无缝兼容老版本数据，历史便签默认保留在进行中。
+
+### 修复
+- **待办清单复选框与文字换行对齐问题**：修复了在待办项中输入文字时文字被换行到复选框下方的 BUG，统一待办项的水平流式弹性盒布局并优化段落边距，保证复选框与文字在同一行完美对齐。
+
 ## v1.4.6
 
 ### Fixed
