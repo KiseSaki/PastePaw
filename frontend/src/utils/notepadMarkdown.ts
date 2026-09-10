@@ -7,7 +7,6 @@ export function htmlToMarkdown(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
-  function processNode(node: Node): string {
   function processNode(node: Node, depth: number = 0, isInsideList: boolean = false): string {
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent || '';
@@ -24,8 +23,6 @@ export function htmlToMarkdown(html: string): string {
     if (tagName === 'li' && el.getAttribute('data-type') === 'taskItem') {
       const checked = el.getAttribute('data-checked') === 'true';
       const mark = checked ? '- [x] ' : '- [ ] ';
-      const inner = Array.from(el.childNodes).map(processNode).join('').trim();
-      return `${mark}${inner}\n`;
       const indent = '  '.repeat(depth);
 
       let textParts: string[] = [];
@@ -60,20 +57,14 @@ export function htmlToMarkdown(html: string): string {
     // Standard List Item
     if (tagName === 'li') {
       const parent = el.parentElement;
-      if (parent && parent.tagName.toLowerCase() === 'ol') {
-        const index = Array.from(parent.children).indexOf(el) + 1;
-        const inner = Array.from(el.childNodes).map(processNode).join('').trim();
-        return `${index}. ${inner}\n`;
       const isOrdered = parent && parent.tagName.toLowerCase() === 'ol';
       const indent = '  '.repeat(depth);
 
       let mark = '- ';
       if (isOrdered) {
-        const index = Array.from(parent!.children).indexOf(el) + 1;
+        const index = Array.from(parent.children).indexOf(el) + 1;
         mark = `${index}. `;
       }
-      const inner = Array.from(el.childNodes).map(processNode).join('').trim();
-      return `- ${inner}\n`;
 
       let textParts: string[] = [];
       let nestedLists = '';
@@ -101,10 +92,8 @@ export function htmlToMarkdown(html: string): string {
       return res;
     }
 
-    // Lists
     // Lists (ul / ol)
     if (tagName === 'ul' || tagName === 'ol') {
-      return Array.from(el.childNodes).map(processNode).join('') + '\n';
       return Array.from(el.childNodes)
         .map((child) => processNode(child, depth, true))
         .join('');
@@ -114,7 +103,6 @@ export function htmlToMarkdown(html: string): string {
     if (/^h[1-6]$/.test(tagName)) {
       const level = parseInt(tagName[1], 10);
       const prefix = '#'.repeat(level) + ' ';
-      const inner = Array.from(el.childNodes).map(processNode).join('').trim();
       const inner = Array.from(el.childNodes)
         .map((c) => processNode(c, depth))
         .join('')
@@ -124,7 +112,6 @@ export function htmlToMarkdown(html: string): string {
 
     // Blockquote
     if (tagName === 'blockquote') {
-      const inner = Array.from(el.childNodes).map(processNode).join('').trim();
       const inner = Array.from(el.childNodes)
         .map((c) => processNode(c, depth))
         .join('')
@@ -145,7 +132,6 @@ export function htmlToMarkdown(html: string): string {
 
     // Paragraph
     if (tagName === 'p') {
-      const inner = Array.from(el.childNodes).map(processNode).join('');
       const inner = Array.from(el.childNodes)
         .map((c) => processNode(c, depth, isInsideList))
         .join('');
@@ -157,7 +143,6 @@ export function htmlToMarkdown(html: string): string {
 
     // Inlines
     if (tagName === 'strong' || tagName === 'b') {
-      return `**${Array.from(el.childNodes).map(processNode).join('')}**`;
       return `**${Array.from(el.childNodes).map((c) => processNode(c, depth, isInsideList)).join('')}**`;
     }
 
@@ -166,7 +151,6 @@ export function htmlToMarkdown(html: string): string {
     }
 
     if (tagName === 's' || tagName === 'del' || tagName === 'strike') {
-      return `~~${Array.from(el.childNodes).map(processNode).join('')}~~`;
       return `~~${Array.from(el.childNodes).map((c) => processNode(c, depth, isInsideList)).join('')}~~`;
     }
 
@@ -185,13 +169,11 @@ export function htmlToMarkdown(html: string): string {
       return '\n';
     }
 
-    return Array.from(el.childNodes).map(processNode).join('');
     return Array.from(el.childNodes)
       .map((c) => processNode(c, depth, isInsideList))
       .join('');
   }
 
-  const raw = Array.from(doc.body.childNodes).map(processNode).join('');
   const raw = Array.from(doc.body.childNodes)
     .map((c) => processNode(c, 0, false))
     .join('');

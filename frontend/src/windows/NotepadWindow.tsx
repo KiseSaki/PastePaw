@@ -33,7 +33,6 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useEditor, EditorContent } from '@tiptap/react';
-import { wrappingInputRule } from '@tiptap/core';
 import { Extension, wrappingInputRule } from '@tiptap/core';
 import { DOMSerializer } from '@tiptap/pm/model';
 import { TextSelection } from '@tiptap/pm/state';
