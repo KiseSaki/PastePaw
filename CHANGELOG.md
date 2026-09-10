@@ -2,6 +2,18 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.5
+
+### Fixed
+- **Markdown Formatting on Selection Copy**: Intercepted clipboard `copy` and `cut` events in the notepad editor to write cleanly formatted Markdown to `text/plain` and rich HTML to `text/html`. Pasting selected text into plain-text editors, IDEs, or chat apps now fully preserves list markers (`- `, `1. `), indentation, bold (`**`), strike (`~~`), and headings (`#`).
+- **Preserved Sublist Indentation on Deletion**: Upgraded `htmlToMarkdown` to recursively track list nesting depth with proper 2-space indentation. Added smart backspace handling for empty list items: clearing an item like `- 1xxx` when followed by `- 2xxx` deletes the empty item directly rather than hoisting it, keeping `- 2xxx` properly nested under `- Fxxx` at Level 2.
+- **Trapped Tab and Handled Indentation**: Intercepted `Tab` and `Shift-Tab` in the editor so focus never escapes to the bottom "Copy All" button. `Tab` now sinks list items to child levels when applicable and inserts 2 spaces in normal text blocks.
+
+### 修复
+- **选中复制保留 Markdown 格式**：拦截便签编辑器中的 `copy` 与 `cut` 剪贴板事件，将选中的富文本切片转换为标准 Markdown 写入 `text/plain`，同时保留 `text/html`。复制选中文本后粘贴至代码编辑器、记事本或聊天应用时，列表标记（`- `、`1. `）、层级缩进、加粗（`**`）、删除线（`~~`）与标题（`#`）格式均能完整保留。
+- **删除列表项保留子层级缩进**：升级 `htmlToMarkdown`，支持递归列表深度并在每级子列表前添加 2 空格缩进。增加智能退格机制：当退格删除一个空列表项且后续存在同级项时（如 `- 1xxx` 之后紧接 `- 2xxx`），直接移除该空节点，避免因提升父级导致 `- 2xxx` 扁平化，使其继续稳固嵌套在 `- Fxxx` 下方的第二级。
+- **拦截 Tab 键并完善缩进**：在编辑器内完全消费 `Tab` 与 `Shift-Tab` 事件，彻底避免焦点意外跳出至底部的“复制全文”按钮；列表项支持按 `Tab` 降级缩进为子项，普通正文按 `Tab` 插入 2 空格缩进。
+
 ## v1.4.4
 
 ### Security & Offline Hardening

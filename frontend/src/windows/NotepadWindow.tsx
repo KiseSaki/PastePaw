@@ -34,6 +34,9 @@ import {
 import { clsx } from 'clsx';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { wrappingInputRule } from '@tiptap/core';
+import { Extension, wrappingInputRule } from '@tiptap/core';
+import { DOMSerializer } from '@tiptap/pm/model';
+import { TextSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -59,6 +62,81 @@ const CustomTaskItem = TaskItem.extend({
         }),
       }),
     ];
+  },
+});
+
+// Custom keyboard handling for Lists & Tabs:
+// 1. Tab / Shift-Tab: Sinks/lifts items without escaping to bottom buttons.
+//    In regular text, Tab inserts 2 spaces.
+// 2. Smart Backspace: When deleting an empty list item that has subsequent siblings
+//    (e.g. - 1xxx is cleared, followed by - 2xxx), deletes the empty item directly
+//    instead of lifting it, preserving 2xxx's nested indentation.
+const ListKeyboardExtension = Extension.create({
+  name: 'listKeyboardExtension',
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      Tab: ({ editor }) => {
+        if (editor.isActive('taskItem')) {
+          editor.commands.sinkListItem('taskItem');
+          return true; // Always consume Tab to prevent focus jumping to bottom buttons
+        }
+        if (editor.isActive('listItem')) {
+          editor.commands.sinkListItem('listItem');
+          return true; // Always consume Tab to prevent focus jumping to bottom buttons
+        }
+        editor.commands.insertContent('  ');
+        return true;
+      },
+      'Shift-Tab': ({ editor }) => {
+        if (editor.isActive('taskItem')) {
+          editor.commands.liftListItem('taskItem');
+          return true; // Always consume Shift-Tab
+        }
+        if (editor.isActive('listItem')) {
+          editor.commands.liftListItem('listItem');
+          return true; // Always consume Shift-Tab
+        }
+        return true;
+      },
+      Backspace: ({ editor }) => {
+        const { state, dispatch } = editor.view;
+        const { selection } = state;
+        if (!selection.empty) return false;
+
+        const { $from } = selection;
+        let itemDepth = -1;
+        for (let d = $from.depth; d > 0; d--) {
+          const nodeName = $from.node(d).type.name;
+          if (nodeName === 'listItem' || nodeName === 'taskItem') {
+            itemDepth = d;
+            break;
+          }
+        }
+
+        if (itemDepth < 0) return false;
+
+        const listItem = $from.node(itemDepth);
+        const listParent = $from.node(itemDepth - 1);
+
+        // Check if cursor is in an empty list item
+        const isEmptyItem = listItem.textContent.trim() === '';
+        if (isEmptyItem && listParent) {
+          const indexInList = $from.index(itemDepth - 1);
+          // If there are subsequent siblings in this list (e.g. 1xxx is empty, followed by 2xxx)
+          if (listParent.childCount > 1 && indexInList < listParent.childCount - 1) {
+            const itemStart = $from.before(itemDepth);
+            const itemEnd = $from.after(itemDepth);
+            const tr = state.tr.delete(itemStart, itemEnd);
+            tr.setSelection(TextSelection.create(tr.doc, Math.min(itemStart + 1, tr.doc.content.size)));
+            dispatch(tr);
+            return true;
+          }
+        }
+
+        return false;
+      },
+    };
   },
 });
 
@@ -196,6 +274,7 @@ export function NotepadWindow() {
       CustomTaskItem.configure({
         nested: true,
       }),
+      ListKeyboardExtension,
       Placeholder.configure({
         placeholder: t('notepad.contentPlaceholder') || '输入便签内容，支持 Markdown (如 - 列表, 1. 列表, [] 待办, **加粗**)...',
       }),
@@ -208,6 +287,57 @@ export function NotepadWindow() {
     editorProps: {
       attributes: {
         class: 'tiptap ProseMirror focus:outline-none min-h-[140px]',
+      },
+      handleDOMEvents: {
+        copy: (view, event) => {
+          const { selection } = view.state;
+          if (selection.empty) return false;
+
+          try {
+            const slice = selection.content();
+            const fragment = DOMSerializer.fromSchema(view.state.schema).serializeFragment(slice.content);
+            const div = document.createElement('div');
+            div.appendChild(fragment);
+            const html = div.innerHTML;
+            const md = htmlToMarkdown(html);
+
+            if (event.clipboardData) {
+              event.clipboardData.clearData();
+              event.clipboardData.setData('text/plain', md);
+              event.clipboardData.setData('text/html', html);
+              event.preventDefault();
+              return true;
+            }
+          } catch (err) {
+            console.error('Custom copy failed:', err);
+          }
+          return false;
+        },
+        cut: (view, event) => {
+          const { selection } = view.state;
+          if (selection.empty) return false;
+
+          try {
+            const slice = selection.content();
+            const fragment = DOMSerializer.fromSchema(view.state.schema).serializeFragment(slice.content);
+            const div = document.createElement('div');
+            div.appendChild(fragment);
+            const html = div.innerHTML;
+            const md = htmlToMarkdown(html);
+
+            if (event.clipboardData) {
+              event.clipboardData.clearData();
+              event.clipboardData.setData('text/plain', md);
+              event.clipboardData.setData('text/html', html);
+              view.dispatch(view.state.tr.deleteSelection());
+              event.preventDefault();
+              return true;
+            }
+          } catch (err) {
+            console.error('Custom cut failed:', err);
+          }
+          return false;
+        },
       },
     },
     content: ensureHtmlContent(content),

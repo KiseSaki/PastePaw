@@ -8,6 +8,7 @@ export function htmlToMarkdown(html: string): string {
   const doc = parser.parseFromString(html, 'text/html');
 
   function processNode(node: Node): string {
+  function processNode(node: Node, depth: number = 0, isInsideList: boolean = false): string {
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent || '';
     }
@@ -25,6 +26,35 @@ export function htmlToMarkdown(html: string): string {
       const mark = checked ? '- [x] ' : '- [ ] ';
       const inner = Array.from(el.childNodes).map(processNode).join('').trim();
       return `${mark}${inner}\n`;
+      const indent = '  '.repeat(depth);
+
+      let textParts: string[] = [];
+      let nestedLists = '';
+
+      el.childNodes.forEach((child) => {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          const childEl = child as HTMLElement;
+          const childTag = childEl.tagName.toLowerCase();
+          if (childTag === 'label') {
+            return; // Skip taskItem checkbox label
+          }
+          if (childTag === 'ul' || childTag === 'ol') {
+            nestedLists += processNode(child, depth + 1, true);
+            return;
+          }
+        }
+        const part = processNode(child, depth, true).trim();
+        if (part) {
+          textParts.push(part);
+        }
+      });
+
+      const textContent = textParts.join(' ');
+      let res = `${indent}${mark}${textContent}\n`;
+      if (nestedLists) {
+        res += nestedLists;
+      }
+      return res;
     }
 
     // Standard List Item
@@ -34,14 +64,50 @@ export function htmlToMarkdown(html: string): string {
         const index = Array.from(parent.children).indexOf(el) + 1;
         const inner = Array.from(el.childNodes).map(processNode).join('').trim();
         return `${index}. ${inner}\n`;
+      const isOrdered = parent && parent.tagName.toLowerCase() === 'ol';
+      const indent = '  '.repeat(depth);
+
+      let mark = '- ';
+      if (isOrdered) {
+        const index = Array.from(parent!.children).indexOf(el) + 1;
+        mark = `${index}. `;
       }
       const inner = Array.from(el.childNodes).map(processNode).join('').trim();
       return `- ${inner}\n`;
+
+      let textParts: string[] = [];
+      let nestedLists = '';
+
+      el.childNodes.forEach((child) => {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          const childEl = child as HTMLElement;
+          const childTag = childEl.tagName.toLowerCase();
+          if (childTag === 'ul' || childTag === 'ol') {
+            nestedLists += processNode(child, depth + 1, true);
+            return;
+          }
+        }
+        const part = processNode(child, depth, true).trim();
+        if (part) {
+          textParts.push(part);
+        }
+      });
+
+      const textContent = textParts.join(' ');
+      let res = `${indent}${mark}${textContent}\n`;
+      if (nestedLists) {
+        res += nestedLists;
+      }
+      return res;
     }
 
     // Lists
+    // Lists (ul / ol)
     if (tagName === 'ul' || tagName === 'ol') {
       return Array.from(el.childNodes).map(processNode).join('') + '\n';
+      return Array.from(el.childNodes)
+        .map((child) => processNode(child, depth, true))
+        .join('');
     }
 
     // Headings
@@ -49,12 +115,20 @@ export function htmlToMarkdown(html: string): string {
       const level = parseInt(tagName[1], 10);
       const prefix = '#'.repeat(level) + ' ';
       const inner = Array.from(el.childNodes).map(processNode).join('').trim();
+      const inner = Array.from(el.childNodes)
+        .map((c) => processNode(c, depth))
+        .join('')
+        .trim();
       return `\n${prefix}${inner}\n\n`;
     }
 
     // Blockquote
     if (tagName === 'blockquote') {
       const inner = Array.from(el.childNodes).map(processNode).join('').trim();
+      const inner = Array.from(el.childNodes)
+        .map((c) => processNode(c, depth))
+        .join('')
+        .trim();
       return `\n> ${inner}\n\n`;
     }
 
@@ -72,16 +146,28 @@ export function htmlToMarkdown(html: string): string {
     // Paragraph
     if (tagName === 'p') {
       const inner = Array.from(el.childNodes).map(processNode).join('');
+      const inner = Array.from(el.childNodes)
+        .map((c) => processNode(c, depth, isInsideList))
+        .join('');
+      if (isInsideList) {
+        return inner;
+      }
       return `${inner}\n\n`;
     }
 
     // Inlines
     if (tagName === 'strong' || tagName === 'b') {
       return `**${Array.from(el.childNodes).map(processNode).join('')}**`;
+      return `**${Array.from(el.childNodes).map((c) => processNode(c, depth, isInsideList)).join('')}**`;
+    }
+
+    if (tagName === 'em' || tagName === 'i') {
+      return `*${Array.from(el.childNodes).map((c) => processNode(c, depth, isInsideList)).join('')}*`;
     }
 
     if (tagName === 's' || tagName === 'del' || tagName === 'strike') {
       return `~~${Array.from(el.childNodes).map(processNode).join('')}~~`;
+      return `~~${Array.from(el.childNodes).map((c) => processNode(c, depth, isInsideList)).join('')}~~`;
     }
 
     if (tagName === 'code') {
@@ -100,9 +186,15 @@ export function htmlToMarkdown(html: string): string {
     }
 
     return Array.from(el.childNodes).map(processNode).join('');
+    return Array.from(el.childNodes)
+      .map((c) => processNode(c, depth, isInsideList))
+      .join('');
   }
 
   const raw = Array.from(doc.body.childNodes).map(processNode).join('');
+  const raw = Array.from(doc.body.childNodes)
+    .map((c) => processNode(c, 0, false))
+    .join('');
   // Normalize consecutive newlines
   return raw.replace(/\n{3,}/g, '\n\n').trim();
 }
