@@ -1,51 +1,51 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { NoteItem, NOTE_COLORS, Settings } from '../types';
-import { useTheme } from '../hooks/useTheme';
-import { useLanguage } from '../hooks/useLanguage';
-import { useTranslation } from 'react-i18next';
-import { Toaster, toast } from 'sonner';
+import { Extension, wrappingInputRule } from '@tiptap/core';
+import Link from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
+import TaskItem from '@tiptap/extension-task-item';
+import TaskList from '@tiptap/extension-task-list';
+import { DOMSerializer } from '@tiptap/pm/model';
+import { TextSelection } from '@tiptap/pm/state';
+import { EditorContent, useEditor } from '@tiptap/react';
+import { BubbleMenu } from '@tiptap/react/menus';
+import StarterKit from '@tiptap/starter-kit';
+import { clsx } from 'clsx';
 import {
+  Bold as BoldIcon,
+  Clock,
+  Code as CodeIcon,
+  Copy,
+  CornerDownLeft,
+  Minus as DividerIcon,
+  Heading1,
+  Heading2,
+  List as ListIcon,
+  Menu,
+  Minus,
+  ListOrdered as OrderedListIcon,
   Pin,
   PinOff,
   Plus,
   Search,
   Sliders,
-  Minus,
-  X,
-  Copy,
-  CornerDownLeft,
-  Trash2,
-  Menu,
   StickyNote,
-  Clock,
-  Bold as BoldIcon,
   Strikethrough as StrikeIcon,
-  Code as CodeIcon,
-  List as ListIcon,
-  ListOrdered as OrderedListIcon,
   CheckSquare as TaskIcon,
-  Heading1,
-  Heading2,
-  Minus as DividerIcon,
+  Trash2,
+  X,
 } from 'lucide-react';
-import { clsx } from 'clsx';
-import { useEditor, EditorContent } from '@tiptap/react';
-import { Extension, wrappingInputRule } from '@tiptap/core';
-import { DOMSerializer } from '@tiptap/pm/model';
-import { TextSelection } from '@tiptap/pm/state';
-import StarterKit from '@tiptap/starter-kit';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
-import Placeholder from '@tiptap/extension-placeholder';
-import Link from '@tiptap/extension-link';
-import { BubbleMenu } from '@tiptap/react/menus';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Toaster, toast } from 'sonner';
+import { useLanguage } from '../hooks/useLanguage';
+import { useTheme } from '../hooks/useTheme';
+import { NOTE_COLORS, NoteItem, Settings } from '../types';
 import {
-  htmlToMarkdown,
   ensureHtmlContent,
   extractPlainTextPreview,
+  htmlToMarkdown,
 } from '../utils/notepadMarkdown';
 
 // Extend TaskItem to support typing [] + space or [ ] + space directly without leading '-'
@@ -139,6 +139,30 @@ const ListKeyboardExtension = Extension.create({
   },
 });
 
+// Completely reset undo/redo history for ProseMirror history plugin
+function resetEditorHistory(editor: any) {
+  if (!editor || editor.isDestroyed) return;
+  const historyPlugin = editor.state.plugins.find(
+    (p: any) =>
+      p.key === 'history$' ||
+      p.key?.startsWith('history$') ||
+      p.spec?.key?.name === 'history' ||
+      p.spec?.config?.depth !== undefined
+  );
+
+  if (historyPlugin && historyPlugin.spec?.state?.init) {
+    const emptyState = historyPlugin.spec.state.init(null, editor.state);
+    let tr = editor.state.tr.setMeta(historyPlugin, { historyState: emptyState });
+    if (historyPlugin.key) {
+      tr = tr.setMeta(historyPlugin.key, { historyState: emptyState });
+    }
+    if (historyPlugin.spec?.key) {
+      tr = tr.setMeta(historyPlugin.spec.key, { historyState: emptyState });
+    }
+    editor.view.dispatch(tr);
+  }
+}
+
 export function NotepadWindow() {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -219,31 +243,77 @@ export function NotepadWindow() {
   const [isSaving, setIsSaving] = useState(false);
 
   const activeNoteRef = useRef<NoteItem | null>(null);
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const colorRef = useRef(color);
+  colorRef.current = color;
+
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef<{ id: string; title: string; content: string; color: string } | null>(null);
   const opacityRef = useRef<HTMLDivElement>(null);
 
-  // Debounced auto-save
-  const triggerAutoSave = useCallback((newTitle: string, newContent: string, newColor: string) => {
+  // Immediately flushes any pending auto-save before switching notes
+  const flushPendingSave = useCallback(async () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    const pending = pendingSaveRef.current;
+    if (!pending) return;
+    pendingSaveRef.current = null;
+
+    try {
+      const updated = await invoke<NoteItem>('update_note', {
+        id: pending.id,
+        title: pending.title.trim() || null,
+        content: pending.content,
+        color: pending.color,
+      });
+      if (activeNoteRef.current?.id === updated.id) {
+        activeNoteRef.current = updated;
+      }
+      setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+    } catch (err) {
+      console.error('Failed to flush pending auto-save:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
+
+  // Debounced auto-save targeting a specific noteId
+  const triggerAutoSave = useCallback((targetNoteId: string, newTitle: string, newContent: string, newColor: string) => {
+    if (!targetNoteId) return;
+
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
 
+    pendingSaveRef.current = {
+      id: targetNoteId,
+      title: newTitle,
+      content: newContent,
+      color: newColor,
+    };
+
     setIsSaving(true);
     saveTimeoutRef.current = setTimeout(async () => {
-      const currentId = activeNoteRef.current?.id;
-      if (!currentId) {
+      const pending = pendingSaveRef.current;
+      if (!pending || pending.id !== targetNoteId) {
         setIsSaving(false);
         return;
       }
+      pendingSaveRef.current = null;
 
       try {
         const updated = await invoke<NoteItem>('update_note', {
-          id: currentId,
+          id: targetNoteId,
           title: newTitle.trim() || null,
           content: newContent,
           color: newColor,
         });
-        activeNoteRef.current = updated;
+        if (activeNoteRef.current?.id === targetNoteId) {
+          activeNoteRef.current = updated;
+        }
         setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
       } catch (err) {
         console.error('Failed to auto-save note:', err);
@@ -341,9 +411,12 @@ export function NotepadWindow() {
     },
     content: ensureHtmlContent(content),
     onUpdate: ({ editor: currentEditor }) => {
+      const currentNote = activeNoteRef.current;
+      if (!currentNote) return;
+
       const html = currentEditor.getHTML();
       setContent(html);
-      triggerAutoSave(title, html, color);
+      triggerAutoSave(currentNote.id, titleRef.current, html, colorRef.current);
     },
   });
 
@@ -372,6 +445,21 @@ export function NotepadWindow() {
     win.setAlwaysOnTop(isAlwaysOnTop).catch(console.error);
   }, [isAlwaysOnTop]);
 
+  // Flush pending auto-save on unmount
+  useEffect(() => {
+    return () => {
+      if (pendingSaveRef.current) {
+        const pending = pendingSaveRef.current;
+        invoke('update_note', {
+          id: pending.id,
+          title: pending.title.trim() || null,
+          content: pending.content,
+          color: pending.color,
+        }).catch(console.error);
+      }
+    };
+  }, []);
+
   // Load Notes
   const loadNotes = useCallback(async (query: string = '') => {
     try {
@@ -386,7 +474,12 @@ export function NotepadWindow() {
 
   // Select note
   const selectNote = useCallback(
-    (note: NoteItem) => {
+    async (note: NoteItem) => {
+      // 1. If switching to a different note, immediately flush any pending save for the previous note
+      if (pendingSaveRef.current && pendingSaveRef.current.id !== note.id) {
+        await flushPendingSave();
+      }
+
       activeNoteRef.current = note;
       setSelectedNoteId(note.id);
       const cleanTitle =
@@ -394,18 +487,24 @@ export function NotepadWindow() {
           ? note.title.trim()
           : '';
       setTitle(cleanTitle);
+      titleRef.current = cleanTitle;
       setContent(note.content);
       setColor(note.color || 'default');
+      colorRef.current = note.color || 'default';
       setIsPinned(note.is_pinned);
       if (editor && !editor.isDestroyed) {
-        editor.commands.setContent(ensureHtmlContent(note.content));
+        editor.commands.setContent(ensureHtmlContent(note.content), { emitUpdate: false });
+        resetEditorHistory(editor);
       }
     },
-    [editor]
+    [editor, flushPendingSave]
   );
 
   // Create new note
   const handleCreateNote = useCallback(async () => {
+    if (pendingSaveRef.current) {
+      await flushPendingSave();
+    }
     try {
       const newNote = await invoke<NoteItem>('create_note', {
         title: null,
@@ -413,16 +512,17 @@ export function NotepadWindow() {
         color: 'default',
       });
       setNotes((prev) => [newNote, ...prev]);
-      selectNote(newNote);
+      await selectNote(newNote);
       if (editor && !editor.isDestroyed) {
-        editor.commands.clearContent(true);
+        editor.commands.clearContent(false);
+        resetEditorHistory(editor);
         editor.commands.focus();
       }
     } catch (err) {
       console.error('Failed to create note:', err);
       toast.error(t('notepad.createFailed'));
     }
-  }, [editor, selectNote, t]);
+  }, [editor, selectNote, flushPendingSave, t]);
 
   useEffect(() => {
     loadNotes(searchQuery).then((loadedNotes) => {
@@ -462,17 +562,34 @@ export function NotepadWindow() {
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;
     setTitle(newTitle);
-    triggerAutoSave(newTitle, content, color);
+    titleRef.current = newTitle;
+    const currentId = activeNoteRef.current?.id;
+    if (currentId) {
+      const currentContent = editor && !editor.isDestroyed ? editor.getHTML() : content;
+      triggerAutoSave(currentId, newTitle, currentContent, colorRef.current);
+    }
   };
 
   // Color change
   const handleColorChange = (newColor: string) => {
     setColor(newColor);
-    triggerAutoSave(title, content, newColor);
+    colorRef.current = newColor;
+    const currentId = activeNoteRef.current?.id;
+    if (currentId) {
+      const currentContent = editor && !editor.isDestroyed ? editor.getHTML() : content;
+      triggerAutoSave(currentId, titleRef.current, currentContent, newColor);
+    }
   };
 
   // Delete note
   const handleDeleteNote = async (id: string) => {
+    if (pendingSaveRef.current && pendingSaveRef.current.id === id) {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      pendingSaveRef.current = null;
+    }
     try {
       await invoke('delete_note', { id });
       const remaining = notes.filter((n) => n.id !== id);
@@ -555,6 +672,9 @@ export function NotepadWindow() {
   };
 
   const handleClose = async () => {
+    if (pendingSaveRef.current) {
+      await flushPendingSave();
+    }
     const win = getCurrentWindow();
     await win.close();
   };
