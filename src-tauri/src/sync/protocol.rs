@@ -117,6 +117,8 @@ pub struct Document {
     pub folders: BTreeMap<String, FolderData>,
     #[serde(default)]
     pub policy: Option<CloudPolicy>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub note_assets: BTreeMap<String, crate::note_assets::Asset>,
 }
 
 impl Document {
@@ -128,10 +130,11 @@ impl Document {
             records: BTreeMap::new(),
             folders: BTreeMap::new(),
             policy: None,
+            note_assets: BTreeMap::new(),
         }
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.schema_version != 1
+        if !matches!(self.schema_version, 1 | 2)
             || Uuid::parse_str(&self.space_id).is_err()
             || self.records.len() > 100_000
             || self.generation >= u64::MAX - 1
@@ -153,6 +156,12 @@ impl Document {
         }
         if let Some(policy) = &self.policy {
             policy.validate()?;
+        }
+        for (hash, asset) in &self.note_assets {
+            asset.validate()?;
+            if hash != &asset.hash || self.schema_version != 2 {
+                return Err("便签附件索引版本或标识不一致".into());
+            }
         }
         Ok(())
     }
@@ -246,6 +255,18 @@ pub fn merge(
         }
     }
     result.generation = remote.generation + 1;
+    if notes {
+        result.schema_version = 2;
+        result.note_assets.extend(local.note_assets.clone());
+        let refs: std::collections::BTreeSet<String> = result
+            .records
+            .values()
+            .filter_map(|r| r.data.as_ref())
+            .filter_map(|data| data.get("content").and_then(Value::as_str))
+            .flat_map(crate::note_assets::references)
+            .collect();
+        result.note_assets.retain(|hash, _| refs.contains(hash));
+    }
     (result, conflicts)
 }
 

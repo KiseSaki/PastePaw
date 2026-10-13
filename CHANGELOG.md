@@ -2,6 +2,34 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.5.0
+
+### Added
+- **Note Editor Tools**: Add current-note find/replace, a slash insertion menu, italic/underline/highlight/clear-format controls and link editing. Code blocks provide language selection, syntax highlighting and individual copy buttons.
+- **Tables and Block Operations**: Insert and edit tables, paste Excel tables or TSV, move/duplicate/delete blocks and drag blocks within their parent. Fold headings and list children while retaining the full content for saving, copying and synchronization.
+- **Note Images and Attachments**: Paste screenshots or insert files, save attachments separately, deduplicate by SHA256 and synchronize original files through WebDAV. The SiYuan plugin 0.2.0 validates and uploads resources before importing linked note content.
+
+### Fixed
+- **Mixed List Nesting**: Preserve parent/child structure when converting bullet, numbered and task lists. Tab, Shift+Tab and empty-item Enter act on the nearest item, including children of a task list.
+- **Markdown Fidelity**: Parse pasted Markdown and preserve nested tasks, numbered-list starts, code language/whitespace, multiline quotes and tables when copying or importing. Share the converter with the SiYuan plugin.
+
+### Upgrade Notes
+- Upgrade all syncing computers to PastePaw 1.5.0 and the SiYuan plugin to 0.2.0 (SiYuan 3.8.6 or newer). Notes migrate to sync format 2; older clients reject it to protect attachment metadata. Existing notes and encrypted connection vaults remain usable.
+- Attachments are limited to 20 MiB each and 500 MiB locally, and count toward the configured cloud total. Backups retain their referenced files; full storage stops uploads and preserves local content. See [the editor guide](docs/note-editor.md).
+
+### 新增
+- **便签编辑工具**：正文查找替换、斜杠插入菜单、斜体/下划线/高亮/清除格式及链接编辑；代码块支持选择语言、语法高亮和单独复制。
+- **表格与块操作**：插入和编辑表格，粘贴 Excel 表格或 TSV，移动/复制/删除块及同级拖动。标题和列表支持折叠，保存、复制和同步仍保留完整正文。
+- **便签图片与附件**：粘贴截图或插入文件，另存附件，按 SHA256 去重并通过 WebDAV 同步原文件。思源插件 0.2.0 校验资源并保存到思源后再导入带链接的正文。
+
+### 修复
+- **列表混合嵌套**：无序、有序、待办列表互相转换时保留父子结构；Tab、Shift+Tab 和空项回车操作最近的列表项，支持待办父项中的其他列表。
+- **Markdown 保真**：粘贴 Markdown 自动转换；复制及思源导入保留嵌套待办、有序起始编号、代码语言和空白、多段引用及表格。便签和思源插件共用转换器。
+
+### 升级说明
+- 所有同步电脑升级至 PastePaw 1.5.0，思源插件升级至 0.2.0（思源 3.8.6 或更新版本）。便签同步格式迁移为版本 2，旧客户端会拒绝读写，防止覆盖附件索引；已有便签和加密连接凭据可继续使用。
+- 单附件上限 20 MiB，本地附件总量上限 500 MiB，云端计入设置中的总额度；保留备份引用的资源，容量不足时停止上传并保留本地内容。操作方法见[编辑器说明](docs/note-editor.md)。
+
 ## v1.4.8
 
 ### Added

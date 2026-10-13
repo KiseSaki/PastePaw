@@ -230,6 +230,7 @@ impl Remote {
             parent,
             self.root.clone(),
             self.root.join("assets/").map_err(|_| "同步目录无效")?,
+            self.root.join("note-assets/").map_err(|_| "同步目录无效")?,
         ] {
             let response = self
                 .client
@@ -336,7 +337,7 @@ impl Remote {
 
     pub async fn inventory(&self) -> Result<Vec<InventoryEntry>, String> {
         let mut result = Vec::new();
-        for directory in ["", "assets/"] {
+        for directory in ["", "assets/", "note-assets/"] {
             let response = self.request(Method::from_bytes(b"PROPFIND").unwrap(), directory)?
                 .header("Depth", "1").header("Content-Type", "application/xml; charset=utf-8")
                 .body("<?xml version=\"1.0\" encoding=\"utf-8\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>")
@@ -380,6 +381,21 @@ impl Remote {
             .ok_or("远端原图缺失")?;
         if file.bytes.len() as u64 != size || digest(&file.bytes) != hash {
             return Err("远端图片校验失败".into());
+        }
+        Ok(file.bytes)
+    }
+
+    pub async fn note_asset(&self, hash: &str, size: u64) -> Result<Vec<u8>, String> {
+        if !super::protocol::valid_asset(hash) || size == 0 || size > crate::note_assets::MAX_ASSET
+        {
+            return Err("便签附件参数无效".into());
+        }
+        let file = self
+            .get(&format!("note-assets/{hash}.bin"), size)
+            .await?
+            .ok_or("远端便签附件缺失")?;
+        if file.bytes.len() as u64 != size || digest(&file.bytes) != hash {
+            return Err("远端便签附件校验失败".into());
         }
         Ok(file.bytes)
     }
@@ -671,6 +687,18 @@ mod tests {
             vec![0; bytes.len()],
         );
         assert!(remote.asset(&hash, bytes.len() as u64).await.is_err());
+        let path = format!("note-assets/{hash}.bin");
+        remote.put(&path, bytes.clone(), None).await.unwrap();
+        assert_eq!(
+            remote.note_asset(&hash, bytes.len() as u64).await.unwrap(),
+            bytes
+        );
+        server
+            .files
+            .lock()
+            .insert(format!("/dav/pastepaw/v1/{path}"), vec![0; bytes.len()]);
+        assert!(remote.note_asset(&hash, bytes.len() as u64).await.is_err());
+        assert!(remote.note_asset("../escape", 1).await.is_err());
     }
 
     #[tokio::test]

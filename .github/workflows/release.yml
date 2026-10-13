@@ -134,6 +134,7 @@ jobs:
 
       - name: Test and build SiYuan plugin
         run: |
+          pnpm test:editor
           pnpm test:siyuan
           pnpm build:siyuan
 

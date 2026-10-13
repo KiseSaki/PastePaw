@@ -356,7 +356,7 @@ export function SyncPanel() {
             [
               ['max_clips', '云端剪切板条数（0 为关闭）', 0, 10000],
               ['clipboard_mib', '云端剪切板额度（MiB）', 1, 10240],
-              ['image_mib', '单张原图上限（MiB）', 1, 20],
+              ['image_mib', '单张剪切板原图上限（MiB）', 1, 20],
               ['total_mib', '客户端云端总额度（MiB）', 10, 102400],
             ] as const
           ).map(([key, label, min, max]) => (

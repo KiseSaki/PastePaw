@@ -343,6 +343,12 @@ fn validate_payloads(document: &Document, notes: bool) -> Result<(), String> {
                     .map_err(|_| "远端便签时间无效")?;
                 chrono::DateTime::parse_from_rfc3339(&data.updated_at)
                     .map_err(|_| "远端便签时间无效")?;
+                if crate::note_assets::references(&data.content)
+                    .iter()
+                    .any(|hash| !document.note_assets.contains_key(hash))
+                {
+                    return Err("远端便签的附件索引不完整".into());
+                }
             } else {
                 let data: ClipData =
                     serde_json::from_value(value.clone()).map_err(|_| "远端剪切板记录格式异常")?;
@@ -386,7 +392,11 @@ fn validate_payloads(document: &Document, notes: bool) -> Result<(), String> {
 }
 
 fn same_document(a: &Document, b: &Document) -> bool {
-    a.records == b.records && a.folders == b.folders && a.policy == b.policy
+    a.records == b.records
+        && a.folders == b.folders
+        && a.policy == b.policy
+        && a.note_assets == b.note_assets
+        && a.schema_version == b.schema_version
 }
 fn encoded(document: &Document) -> Result<Vec<u8>, String> {
     document.validate()?;
@@ -429,6 +439,14 @@ fn asset_references(document: &Document) -> Result<HashSet<String>, String> {
     Ok(result)
 }
 
+fn note_references(document: &Document) -> HashSet<String> {
+    document
+        .note_assets
+        .keys()
+        .map(|hash| format!("note-assets/{hash}.bin"))
+        .collect()
+}
+
 async fn cleanup(
     remote: &Remote,
     lease: &mut Lease,
@@ -449,7 +467,12 @@ async fn cleanup(
                 .strip_prefix("probe-")
                 .and_then(|p| p.strip_suffix(".json"))
                 .is_some_and(|p| uuid::Uuid::parse_str(p).is_ok());
-            (asset || probe)
+            let note_asset = entry
+                .path
+                .strip_prefix("note-assets/")
+                .and_then(|p| p.strip_suffix(".bin"))
+                .is_some_and(valid_asset);
+            (asset || note_asset || probe)
                 && !references.contains(&entry.path)
                 && entry.modified_at > 0
                 && entry.modified_at < cutoff
@@ -480,6 +503,7 @@ async fn execute(app: &AppHandle, credentials: Credentials) -> Result<SyncReport
         return Err("请先开启 WebDAV 同步".into());
     }
     let remote = Remote::new(credentials.clone())?;
+    remote.initialize().await?;
     let mut lease = remote.acquire().await?;
     let outcome = async {
         let notes_file = remote.get("notes.json", MAX_DOCUMENT).await?;
@@ -513,17 +537,36 @@ async fn execute(app: &AppHandle, credentials: Credentials) -> Result<SyncReport
             return Err("远端空间被重置或同步文件缺失，请恢复备份或使用新的专用目录".into());
         }
         let mut inventory = remote.inventory().await?;
-        cleanup(
-            &remote,
-            &mut lease,
-            &asset_references(&clips)?,
-            &mut inventory,
-        )
-        .await?;
+        let backup_file = remote.get("notes-backup.json", MAX_DOCUMENT).await?;
+        let backup_notes = decode_document(&backup_file, &space)?;
+        let mut protected = asset_references(&clips)?;
+        protected.extend(note_references(&notes));
+        protected.extend(note_references(&backup_notes));
+        cleanup(&remote, &mut lease, &protected, &mut inventory).await?;
         let local_notes =
             store::capture(&db.pool, "notes", &notes_base, &policy, &credentials).await?;
         let (merged_notes, note_conflicts) =
             merge(&notes_base, &local_notes.document, &notes, true);
+        // 先完整上传和验证资源，再发布正文索引；失败时远端原正文仍然可读。
+        for (hash, asset) in &merged_notes.note_assets {
+            let path = format!("note-assets/{hash}.bin");
+            remote.renew(&mut lease).await?;
+            if inventory.iter().any(|e| e.path == path) {
+                if crate::note_assets::metadata(&db.pool, hash).await.is_err() {
+                    let bytes = remote.note_asset(hash, asset.size as u64).await?;
+                    crate::note_assets::persist(&db.pool, asset, &bytes).await?;
+                }
+            } else {
+                let bytes = crate::note_assets::bytes(&db.pool, hash).await?;
+                budget(&inventory, bytes.len() as u64, &policy)?;
+                remote.put(&path, bytes.clone(), None).await?;
+                inventory.push(InventoryEntry {
+                    path,
+                    size: bytes.len() as u64,
+                    modified_at: remote.now()?,
+                });
+            }
+        }
         let notes_changed = !same_document(&merged_notes, &notes_base);
         if !same_document(&merged_notes, &notes) || notes_file.is_none() {
             let bytes = encoded(&merged_notes)?;
@@ -674,7 +717,13 @@ async fn execute(app: &AppHandle, credentials: Credentials) -> Result<SyncReport
             cleanup(
                 &remote,
                 &mut lease,
-                &asset_references(&clips)?,
+                &{
+                    let mut refs = asset_references(&clips)?;
+                    refs.extend(note_references(&notes));
+                    refs.extend(note_references(&merged_notes));
+                    refs.extend(note_references(&backup_notes));
+                    refs
+                },
                 &mut inventory,
             )
             .await?;
@@ -734,7 +783,14 @@ async fn execute(app: &AppHandle, credentials: Credentials) -> Result<SyncReport
             &images,
         )
         .await?;
-        cleanup(&remote, &mut lease, &references, &mut inventory).await?;
+        let mut all_references = references;
+        all_references.extend(note_references(&merged_notes));
+        all_references.extend(note_references(if !same_document(&merged_notes, &notes) {
+            &notes
+        } else {
+            &backup_notes
+        }));
+        cleanup(&remote, &mut lease, &all_references, &mut inventory).await?;
         db.set_setting(
             "webdav_sync_options",
             &serde_json::to_string(&settings).map_err(|_| "同步设置编码失败")?,

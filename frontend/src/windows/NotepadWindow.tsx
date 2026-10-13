@@ -1,40 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Extension, wrappingInputRule } from '@tiptap/core';
-import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import TaskItem from '@tiptap/extension-task-item';
-import TaskList from '@tiptap/extension-task-list';
 import { DOMSerializer } from '@tiptap/pm/model';
-import { TextSelection } from '@tiptap/pm/state';
-import { EditorContent, useEditor } from '@tiptap/react';
-import { BubbleMenu } from '@tiptap/react/menus';
-import StarterKit from '@tiptap/starter-kit';
+import { Editor, EditorContent, useEditor } from '@tiptap/react';
 import { clsx } from 'clsx';
 import {
-  Bold as BoldIcon,
   CheckCircle2,
   CircleDot,
   Clock,
-  Code as CodeIcon,
   Copy,
   CornerDownLeft,
-  Minus as DividerIcon,
-  Heading1,
-  Heading2,
-  List as ListIcon,
   Menu,
   Minus,
-  ListOrdered as OrderedListIcon,
   Pin,
   PinOff,
   Plus,
   Search,
   Sliders,
   StickyNote,
-  Strikethrough as StrikeIcon,
-  CheckSquare as TaskIcon,
   Trash2,
   X,
 } from 'lucide-react';
@@ -43,105 +27,15 @@ import { useTranslation } from 'react-i18next';
 import { Toaster, toast } from 'sonner';
 import { useLanguage } from '../hooks/useLanguage';
 import { useTheme } from '../hooks/useTheme';
+import { noteExtensions, handleNotePaste } from '../editor/extensions';
+import { EditorTools } from '../editor/EditorTools';
+import { insertFiles } from '../editor/assets';
 import { NOTE_COLORS, NoteItem, Settings } from '../types';
 import {
   ensureHtmlContent,
   extractPlainTextPreview,
   htmlToMarkdown,
 } from '../utils/notepadMarkdown';
-
-// Extend TaskItem to support typing [] + space or [ ] + space directly without leading '-'
-const CustomTaskItem = TaskItem.extend({
-  addInputRules() {
-    return [
-      ...(this.parent?.() || []),
-      wrappingInputRule({
-        find: /^\s*\[([ xX]?)\]\s$/,
-        type: this.type,
-        getAttributes: (match) => ({
-          checked: match[1].toLowerCase() === 'x',
-        }),
-      }),
-    ];
-  },
-});
-
-// Custom keyboard handling for Lists & Tabs:
-// 1. Tab / Shift-Tab: Sinks/lifts items without escaping to bottom buttons.
-//    In regular text, Tab inserts 2 spaces.
-// 2. Smart Backspace: When deleting an empty list item that has subsequent siblings
-//    (e.g. - 1xxx is cleared, followed by - 2xxx), deletes the empty item directly
-//    instead of lifting it, preserving 2xxx's nested indentation.
-const ListKeyboardExtension = Extension.create({
-  name: 'listKeyboardExtension',
-  priority: 1000,
-  addKeyboardShortcuts() {
-    return {
-      Tab: ({ editor }) => {
-        if (editor.isActive('taskItem')) {
-          editor.commands.sinkListItem('taskItem');
-          return true; // Always consume Tab to prevent focus jumping to bottom buttons
-        }
-        if (editor.isActive('listItem')) {
-          editor.commands.sinkListItem('listItem');
-          return true; // Always consume Tab to prevent focus jumping to bottom buttons
-        }
-        editor.commands.insertContent('  ');
-        return true;
-      },
-      'Shift-Tab': ({ editor }) => {
-        if (editor.isActive('taskItem')) {
-          editor.commands.liftListItem('taskItem');
-          return true; // Always consume Shift-Tab
-        }
-        if (editor.isActive('listItem')) {
-          editor.commands.liftListItem('listItem');
-          return true; // Always consume Shift-Tab
-        }
-        return true;
-      },
-      Backspace: ({ editor }) => {
-        const { state, dispatch } = editor.view;
-        const { selection } = state;
-        if (!selection.empty) return false;
-
-        const { $from } = selection;
-        let itemDepth = -1;
-        for (let d = $from.depth; d > 0; d--) {
-          const nodeName = $from.node(d).type.name;
-          if (nodeName === 'listItem' || nodeName === 'taskItem') {
-            itemDepth = d;
-            break;
-          }
-        }
-
-        if (itemDepth < 0) return false;
-
-        const listItem = $from.node(itemDepth);
-        const listParent = $from.node(itemDepth - 1);
-
-        // Check if cursor is in an empty list item
-        const isEmptyItem = listItem.textContent.trim() === '';
-        if (isEmptyItem && listParent) {
-          const indexInList = $from.index(itemDepth - 1);
-          // If there are subsequent siblings in this list (e.g. 1xxx is empty, followed by 2xxx)
-          if (listParent.childCount > 1 && indexInList < listParent.childCount - 1) {
-            const itemStart = $from.before(itemDepth);
-            const itemEnd = $from.after(itemDepth);
-            const tr = state.tr.delete(itemStart, itemEnd);
-            tr.setSelection(
-              TextSelection.create(tr.doc, Math.min(itemStart + 1, tr.doc.content.size))
-            );
-            dispatch(tr);
-            return true;
-          }
-        }
-
-        return false;
-      },
-    };
-  },
-});
 
 // Completely reset undo/redo history for ProseMirror history plugin
 function resetEditorHistory(editor: any) {
@@ -364,47 +258,23 @@ export function NotepadWindow() {
   );
 
   // Tiptap Editor Instance
-  const editor = useEditor({
+  const editor: Editor | null = useEditor({
     extensions: [
-      StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3],
-        },
-        bulletList: {
-          keepMarks: true,
-          keepAttributes: false,
-        },
-        orderedList: {
-          keepMarks: true,
-          keepAttributes: false,
-        },
-      }),
-      TaskList.configure({
-        HTMLAttributes: {
-          'data-type': 'taskList',
-        },
-      }),
-      CustomTaskItem.configure({
-        nested: true,
-        HTMLAttributes: {
-          'data-type': 'taskItem',
-        },
-      }),
-      ListKeyboardExtension,
-      Placeholder.configure({
-        placeholder:
-          t('notepad.contentPlaceholder') ||
-          '输入便签内容，支持 Markdown (如 - 列表, 1. 列表, [] 待办, **加粗**)...',
-      }),
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        defaultProtocol: 'https',
-      }),
+      ...noteExtensions(),
+      Placeholder.configure({ placeholder: t('notepad.editor.placeholder') }),
     ],
     editorProps: {
       attributes: {
         class: 'tiptap ProseMirror focus:outline-none min-h-[140px]',
+      },
+      handlePaste: (_view, event) => (editor ? handleNotePaste(editor, event) : false),
+      handleDrop: (_view, event) => {
+        const files = Array.from(event.dataTransfer?.files || []);
+        if (files.length && editor) {
+          void insertFiles(editor, files);
+          return true;
+        }
+        return false;
       },
       handleDOMEvents: {
         copy: (view, event) => {
@@ -927,7 +797,7 @@ export function NotepadWindow() {
         handleCopyAll();
       }
       // Ctrl+D: Toggle Complete
-      if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+      if (e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'd') {
         e.preventDefault();
         if (selectedNoteId) {
           handleToggleComplete(selectedNoteId);
@@ -1452,86 +1322,6 @@ export function NotepadWindow() {
               )}
             </div>
 
-            {/* Quick Markdown Format Buttons */}
-            {editor && (
-              <div className="mr-2 hidden items-center gap-0.5 sm:flex">
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleBold().run()}
-                  title={`${t('notepad.bold')} (Ctrl+B)`}
-                  className={clsx(
-                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
-                    editor.isActive('bold') && 'bg-amber-500/20 font-bold text-amber-500'
-                  )}
-                >
-                  <BoldIcon size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleStrike().run()}
-                  title={`${t('notepad.strike')} (~~文字~~)`}
-                  className={clsx(
-                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
-                    editor.isActive('strike') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                >
-                  <StrikeIcon size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleTaskList().run()}
-                  title={`${t('notepad.taskList')} ([] + 空格)`}
-                  className={clsx(
-                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
-                    editor.isActive('taskList') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                >
-                  <TaskIcon size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  title={`${t('notepad.bulletList')} (- + 空格)`}
-                  className={clsx(
-                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
-                    editor.isActive('bulletList') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                >
-                  <ListIcon size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                  title={`${t('notepad.orderedList')} (1. + 空格)`}
-                  className={clsx(
-                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
-                    editor.isActive('orderedList') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                >
-                  <OrderedListIcon size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleCode().run()}
-                  title={`${t('notepad.code')} (\`代码\`)}`}
-                  className={clsx(
-                    'rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground',
-                    editor.isActive('code') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                >
-                  <CodeIcon size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().setHorizontalRule().run()}
-                  title={`${t('notepad.divider')} (--- 回车)`}
-                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-                >
-                  <DividerIcon size={12} />
-                </button>
-              </div>
-            )}
-
             {/* Color Tag Picker & Top Actions */}
             <div className="flex shrink-0 items-center gap-1.5">
               {NOTE_COLORS.map((c) => (
@@ -1592,93 +1382,10 @@ export function NotepadWindow() {
             </div>
           </div>
 
+          {editor && <EditorTools editor={editor} noteId={selectedNoteId} />}
+
           {/* Tiptap Rich Markdown Editor */}
           <div className="relative flex-1 overflow-y-auto p-3 text-xs leading-relaxed">
-            {editor && (
-              <BubbleMenu
-                editor={editor}
-                className="flex items-center gap-1 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl"
-              >
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleBold().run()}
-                  className={clsx(
-                    'rounded p-1.5 transition-colors hover:bg-accent',
-                    editor.isActive('bold') && 'bg-amber-500/20 font-bold text-amber-500'
-                  )}
-                  title={t('notepad.bold')}
-                >
-                  <BoldIcon size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleStrike().run()}
-                  className={clsx(
-                    'rounded p-1.5 transition-colors hover:bg-accent',
-                    editor.isActive('strike') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                  title={t('notepad.strike')}
-                >
-                  <StrikeIcon size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                  className={clsx(
-                    'rounded p-1.5 transition-colors hover:bg-accent',
-                    editor.isActive('heading', { level: 1 }) && 'bg-amber-500/20 text-amber-500'
-                  )}
-                  title={t('notepad.heading1')}
-                >
-                  <Heading1 size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                  className={clsx(
-                    'rounded p-1.5 transition-colors hover:bg-accent',
-                    editor.isActive('heading', { level: 2 }) && 'bg-amber-500/20 text-amber-500'
-                  )}
-                  title={t('notepad.heading2')}
-                >
-                  <Heading2 size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleTaskList().run()}
-                  className={clsx(
-                    'rounded p-1.5 transition-colors hover:bg-accent',
-                    editor.isActive('taskList') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                  title={t('notepad.taskList')}
-                >
-                  <TaskIcon size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  className={clsx(
-                    'rounded p-1.5 transition-colors hover:bg-accent',
-                    editor.isActive('bulletList') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                  title={t('notepad.bulletList')}
-                >
-                  <ListIcon size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleCode().run()}
-                  className={clsx(
-                    'rounded p-1.5 transition-colors hover:bg-accent',
-                    editor.isActive('code') && 'bg-amber-500/20 text-amber-500'
-                  )}
-                  title={t('notepad.code')}
-                >
-                  <CodeIcon size={13} />
-                </button>
-              </BubbleMenu>
-            )}
-
             <EditorContent editor={editor} className="h-full min-h-[140px] focus:outline-none" />
           </div>
 

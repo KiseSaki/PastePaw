@@ -207,6 +207,7 @@ impl Database {
         .await;
 
         crate::sync::store::migrate(&self.pool).await?;
+        crate::note_assets::migrate(&self.pool).await?;
         Ok(())
     }
 
@@ -219,10 +220,12 @@ impl Database {
     }
 
     pub async fn get_first_pinned_note_uuid(&self) -> Option<String> {
-        sqlx::query_scalar("SELECT uuid FROM notes WHERE is_pinned = 1 ORDER BY updated_at DESC LIMIT 1")
-            .fetch_optional(&self.pool)
-            .await
-            .unwrap_or(None)
+        sqlx::query_scalar(
+            "SELECT uuid FROM notes WHERE is_pinned = 1 ORDER BY updated_at DESC LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .unwrap_or(None)
     }
 
     pub async fn get_setting(&self, key: &str) -> Option<String> {

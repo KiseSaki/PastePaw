@@ -165,6 +165,7 @@ pub async fn capture(
             .map_err(db_error)?;
     let aliases: BTreeMap<String, String> = aliases.into_iter().collect();
     if kind == "notes" {
+        document.schema_version = 2;
         let estimate: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(length(CAST(content AS BLOB))+length(CAST(title AS BLOB))+512),0) FROM notes")
             .fetch_one(&mut *tx).await.map_err(db_error)?;
         if estimate > MAX_DOCUMENT as i64 {
@@ -175,6 +176,17 @@ pub async fn capture(
             .await
             .map_err(db_error)?;
         for note in notes {
+            for hash in crate::note_assets::references(&note.content) {
+                let asset: crate::note_assets::Asset =
+                    sqlx::query_as("SELECT hash,name,mime,size FROM note_assets WHERE hash=?")
+                        .bind(&hash)
+                        .fetch_optional(&mut *tx)
+                        .await
+                        .map_err(db_error)?
+                        .ok_or("便签附件缺失，已暂停同步")?;
+                asset.validate()?;
+                document.note_assets.insert(hash, asset);
+            }
             let data = serde_json::to_value(note_data(&note)).map_err(|_| "便签编码失败")?;
             checks.insert(note.uuid.clone(), digest(data.to_string().as_bytes()));
             document.records.insert(
@@ -661,6 +673,109 @@ pub async fn scrub(
 mod tests {
     use super::*;
     use crate::database::Database;
+
+    #[tokio::test]
+    async fn note_attachments_follow_conflict_copies_and_restore_on_another_device() {
+        let db = Database {
+            pool: SqlitePool::connect("sqlite::memory:").await.unwrap(),
+        };
+        db.migrate().await.unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let payload = b"original attachment";
+        let asset = crate::note_assets::Asset {
+            hash: digest(payload),
+            name: "中文.txt".into(),
+            mime: "application/octet-stream".into(),
+            size: payload.len() as i64,
+        };
+        crate::note_assets::persist(&db.pool, &asset, payload)
+            .await
+            .unwrap();
+        let html = format!(
+            "<div data-type=\"attachment\" data-asset=\"{}\" data-name=\"中文.txt\">中文.txt</div>",
+            asset.hash
+        );
+        sqlx::query("INSERT INTO notes(uuid,title,content) VALUES(?,'带附件',?)")
+            .bind(&id)
+            .bind(&html)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        let base = Document::new(uuid::Uuid::new_v4().to_string());
+        let credentials = Credentials {
+            profile_id: uuid::Uuid::new_v4().to_string(),
+            endpoint: "http://example.invalid/".into(),
+            directory: "pastepaw".into(),
+            username: "fixture-user".into(),
+            password: "fixture-password".into(),
+        };
+        let local = capture(
+            &db.pool,
+            "notes",
+            &base,
+            &CloudPolicy::default(),
+            &credentials,
+        )
+        .await
+        .unwrap();
+        assert_eq!(local.document.schema_version, 2);
+        assert_eq!(local.document.note_assets[&asset.hash], asset);
+        let mut remote = local.document.clone();
+        remote.records.get_mut(&id).unwrap().revision = uuid::Uuid::new_v4().to_string();
+        remote.records.get_mut(&id).unwrap().data.as_mut().unwrap()["content"] =
+            serde_json::json!("远端编辑");
+        let (merged, conflicts) = merge(&base, &local.document, &remote, true);
+        assert_eq!(conflicts, 1);
+        assert!(merged.note_assets.contains_key(&asset.hash));
+        let other = Database {
+            pool: SqlitePool::connect("sqlite::memory:").await.unwrap(),
+        };
+        other.migrate().await.unwrap();
+        crate::note_assets::persist(&other.pool, &asset, payload)
+            .await
+            .unwrap();
+        let empty = capture(
+            &other.pool,
+            "notes",
+            &base,
+            &CloudPolicy::default(),
+            &credentials,
+        )
+        .await
+        .unwrap();
+        apply(
+            &other.pool,
+            "fixture",
+            "notes",
+            &empty,
+            &merged,
+            &BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+        let restored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes WHERE content=?")
+            .bind(&html)
+            .fetch_one(&other.pool)
+            .await
+            .unwrap();
+        assert_eq!(restored, 1);
+        assert_eq!(
+            crate::note_assets::bytes(&other.pool, &asset.hash)
+                .await
+                .unwrap(),
+            payload
+        );
+        let next = capture(
+            &other.pool,
+            "notes",
+            &merged,
+            &CloudPolicy::default(),
+            &credentials,
+        )
+        .await
+        .unwrap();
+        assert_eq!(next.document.records, merged.records);
+    }
 
     #[tokio::test]
     async fn migration_and_note_conflicts_survive_local_concurrent_edits() {

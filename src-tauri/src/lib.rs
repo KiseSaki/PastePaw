@@ -20,6 +20,7 @@ mod commands;
 mod constants;
 mod database;
 mod models;
+mod note_assets;
 mod settings_commands;
 mod settings_manager;
 mod sync;
@@ -40,7 +41,9 @@ pub fn run_app() {
     let db = rt.block_on(async { Database::new(&db_path_str).await });
 
     rt.block_on(async {
-        db.migrate().await.expect("数据库迁移失败，请备份本地数据库并检查磁盘与权限");
+        db.migrate()
+            .await
+            .expect("数据库迁移失败，请备份本地数据库并检查磁盘与权限");
     });
 
     let db_arc = Arc::new(db);
@@ -389,7 +392,11 @@ pub fn run_app() {
             sync::test_sync_connection,
             sync::sync_now,
             sync::set_sync_note_pending,
-            sync::pause_sync_clipboard
+            sync::pause_sync_clipboard,
+            note_assets::store_note_asset,
+            note_assets::read_note_asset,
+            note_assets::save_note_asset,
+            note_assets::open_note_link
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,3 +1,4 @@
+import { assetReferences } from '../../shared/noteMarkdown.js';
 const encoder = new TextEncoder();
 const AAD = encoder.encode('pastepaw-webdav-vault-v1');
 const UUID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
@@ -169,7 +170,7 @@ export async function loadNotes(credentials, api, signal) {
 export function validateNotes(document) {
   if (
     !document ||
-    document.schema_version !== 1 ||
+    ![1, 2].includes(document.schema_version) ||
     !UUID.test(document.space_id) ||
     !document.records ||
     typeof document.records !== 'object' ||
@@ -177,6 +178,27 @@ export function validateNotes(document) {
     Object.keys(document.records).length > 100000
   )
     fail('不支持的便签同步格式');
+  const assets = document.note_assets || {};
+  if (typeof assets !== 'object' || Array.isArray(assets) || Object.keys(assets).length > 100000)
+    fail('附件索引格式异常');
+  for (const [id, asset] of Object.entries(assets)) {
+    if (
+      document.schema_version !== 2 ||
+      !/^[a-f0-9]{64}$/.test(id) ||
+      asset.hash !== id ||
+      !Number.isInteger(asset.size) ||
+      asset.size <= 0 ||
+      asset.size > 20 * 1024 * 1024 ||
+      typeof asset.name !== 'string' ||
+      !asset.name ||
+      asset.name.length > 512 ||
+      /[/\\\0]/.test(asset.name) ||
+      !['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/octet-stream'].includes(
+        asset.mime
+      )
+    )
+      fail('附件标识或参数异常');
+  }
   for (const [id, record] of Object.entries(document.records)) {
     if (
       !UUID.test(id) ||
@@ -198,6 +220,9 @@ export function validateNotes(document) {
         !Number.isFinite(Date.parse(data.updated_at))
       )
         fail('便签内容或时间格式异常');
+      for (const id of assetReferences(data.content)) {
+        if (!assets[id]) fail('便签缺少附件索引');
+      }
     }
   }
 }
@@ -230,7 +255,6 @@ export function canonical(text) {
         .trimEnd();
     })
     .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -328,7 +352,7 @@ export async function importNotes(
     } else {
       const markdown = renderNote(
         record.data,
-        convertHtml(record.data.content),
+        await convertHtml(record.data.content),
         key,
         record.revision
       );

@@ -1,5 +1,5 @@
 import { Plugin, Dialog, Setting, showMessage, confirm, getFrontend } from 'siyuan';
-import { htmlToMarkdown } from './markdown.js';
+import { assetConverter } from './assets.js';
 import { BLOCK_ID, decryptVault, encryptVault, importNotes, loadNotes } from './core.js';
 import './index.css';
 
@@ -84,8 +84,8 @@ export default class PastePawWebdav extends Plugin {
     try {
       const response = await fetch(path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        headers: data instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+        body: data instanceof FormData ? data : JSON.stringify(data),
         signal: controller.signal,
         credentials: 'same-origin',
       });
@@ -302,7 +302,7 @@ export default class PastePawWebdav extends Plugin {
           document,
           this.settings.documentId,
           api,
-          htmlToMarkdown,
+          assetConverter(document, this.session.credentials, api, signal),
           signal,
           (done, total) => {
             field('result').textContent = `正在导入 ${done} / ${total}`;

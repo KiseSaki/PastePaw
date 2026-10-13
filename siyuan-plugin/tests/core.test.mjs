@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { JSDOM } from 'jsdom';
+globalThis.DOMParser = new JSDOM('').window.DOMParser;
 import {
   ATTR,
   canonical,
@@ -210,6 +212,7 @@ test('比较内容时排除思源易变 ID，保留代码块内的字面内容',
     await hash(canonical('正文\n{: id="b" updated="2" custom-pastepaw-hash="y"}'))
   );
   assert.notEqual(canonical('```\n{: id="a"}\n```'), canonical('```\n{: id="b"}\n```'));
+  assert.notEqual(canonical('```\na\n\n\nb\n```'), canonical('```\na\n\nb\n```'));
 });
 
 test('插件只读取便签文件，坏数据在任何文档写入前被拒绝', async () => {
