@@ -19,13 +19,23 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         id: changelog
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          # Extract the section between "## v{VERSION}" and the next "## v" heading
-          CONTENT=$(sed -n "/^## v${VERSION}/,/^## v/{/^## v${VERSION}/d;/^## v/d;p}" CHANGELOG.md)
-          EOF_MARKER=$(openssl rand -hex 8)
-          echo "body<<$EOF_MARKER" >> $GITHUB_OUTPUT
-          echo "$CONTENT" >> $GITHUB_OUTPUT
-          echo "$EOF_MARKER" >> $GITHUB_OUTPUT
+          python3 - <<'PY'
+          import os
+          import secrets
+          from pathlib import Path
+
+          # 按完整版本标题提取中英文发布记录，始终使用 UTF-8。
+          title = f"## {os.environ['GITHUB_REF_NAME']}"
+          lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          start = lines.index(title) + 1
+          end = next((i for i in range(start, len(lines)) if lines[i].startswith("## v")), len(lines))
+          body = "\n".join(lines[start:end]).strip()
+          if not body:
+              raise SystemExit("当前版本缺少发布记录")
+          marker = secrets.token_hex(16)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"body<<{marker}\n{body}\n{marker}\n")
+          PY
 
       - name: Create Release
         if: github.event_name != 'workflow_dispatch'
@@ -101,6 +111,52 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
 
+  siyuan-plugin:
+    needs: create-release
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test and build SiYuan plugin
+        run: |
+          pnpm test:siyuan
+          pnpm build:siyuan
+
+      - name: Package SiYuan plugin
+        id: package
+        run: |
+          PLUGIN_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('siyuan-plugin/plugin.json', 'utf8')).version")
+          ZIP_NAME="pastepaw-webdav-sync-${PLUGIN_VERSION}.zip"
+          mkdir -p artifacts
+          cd siyuan-plugin/dist
+          # 只打包明确的发布文件，避免包含运行时配置和凭据。
+          zip -r "../../artifacts/${ZIP_NAME}" index.js index.css plugin.json README.md README.zh-CN.md i18n
+          echo "path=artifacts/${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload SiYuan plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('draft-{0}', github.sha) || github.ref_name }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' }}
+          files: ${{ steps.package.outputs.path }}
+          fail_on_unmatched_files: true
+
   virustotal-scan:
     needs: release
     if: github.event_name != 'workflow_dispatch'
@@ -158,4 +214,3 @@ jobs:
           gh release edit ${{ github.ref_name }} --notes-file release_body.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

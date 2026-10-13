@@ -2,6 +2,38 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.4.8
+
+### Added
+- **Optional WebDAV Sync**: Sync all notes bidirectionally across computers, with configurable clipboard count, image size, clipboard storage and total storage limits. Concurrent note edits retain conflict copies; manual deletion propagates while local history eviction does not.
+- **Encrypted Connection Credentials**: Save the WebDAV address, directory, username and password together in an encrypted vault beside the executable. Supports HTTP/HTTPS, independent unlock passwords of at least 6 characters, automatic locking and pausing clipboard capture while entering credentials.
+- **SiYuan Note Import Plugin**: A Windows/Android plugin manually pulls notes into a selected document. Repeated imports reuse existing blocks, manually edited content is preserved, and device credentials are encrypted separately.
+- **Plugin Release Asset**: Automatically build and attach the SiYuan plugin ZIP alongside the Windows x64 and ARM64 installers.
+
+### Fixed
+- **Apache WebDAV Compatibility**: Retry briefly when newly uploaded files return a temporary weak ETag, including `bytemark/webdav`. Strong ETag and conditional-write checks remain required for bidirectional sync.
+- **Sync During Editing**: Protect pending note saves and edits made during a sync operation. Deduplicate imported clipboard entries and retain original images.
+- **WebDAV Settings Icon**: Add a cloud icon aligned with the other settings navigation items.
+
+### Usage Notes
+- WebDAV sync is disabled until configured. HTTP sends credentials and synchronized content in plaintext; vault encryption protects local connection settings rather than cloud note content.
+- Client storage limits do not replace server-side quotas. See [the sync guide](docs/webdav-sync.md) for setup, credential cleanup and SiYuan plugin installation.
+
+### 新增
+- **可选 WebDAV 双向同步**：多台电脑全量同步便签，剪切板支持配置条数、单图大小、剪切板容量和总容量。并发编辑保留冲突副本；手动删除跨端传播，本地历史淘汰不会删除云端内容。
+- **连接凭据加密保存**：地址、目录、账号和密码一起加密保存在安装目录，支持 HTTP/HTTPS、至少 6 个字符的独立解锁密码、自动锁定，以及输入凭据时暂停剪切板采集。
+- **思源便签导入插件**：支持 Windows 和安卓，点击按钮将 WebDAV 便签拉取到指定文档，重复导入复用已有块，保留手动编辑内容，各设备连接凭据分别加密。
+- **插件自动发布附件**：自动构建思源插件 ZIP，与 Windows x64、ARM64 安装包一起发布。
+
+### 修复
+- **Apache WebDAV 兼容性**：新上传文件短暂返回弱 ETag 时等待后重新读取，兼容 `bytemark/webdav`，继续保留强 ETag 和条件写入校验。
+- **同步期间编辑保护**：保护未完成的便签自动保存及同步期间发生的本地编辑；避免剪切板导入重复记录，并保留完整原图。
+- **WebDAV 设置图标**：补齐云图标，与其他设置菜单项对齐。
+
+### 使用说明
+- WebDAV 同步默认关闭，需要配置后启用。HTTP 会明文传输凭据和同步内容；凭据文件加密保护的是本地连接设置，云端便签内容不进行端到端加密。
+- 客户端容量限制不能替代服务器硬配额。配置、凭据清理和思源插件安装方法见[同步说明](docs/webdav-sync.md)。
+
 ## v1.4.7
 
 ### Added
