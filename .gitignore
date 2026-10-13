@@ -24,3 +24,11 @@ data/
 
 # Don't know why this file is always created...
 nul
+
+# 同步凭据与插件构建产物
+**/secrets/
+*.vault.json
+siyuan-plugin/dist/
+artifacts/
+
+.playwright-mcp/

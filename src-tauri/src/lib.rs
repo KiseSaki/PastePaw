@@ -22,6 +22,7 @@ mod database;
 mod models;
 mod settings_commands;
 mod settings_manager;
+mod sync;
 
 use database::Database;
 use models::get_runtime;
@@ -39,7 +40,7 @@ pub fn run_app() {
     let db = rt.block_on(async { Database::new(&db_path_str).await });
 
     rt.block_on(async {
-        db.migrate().await.ok();
+        db.migrate().await.expect("数据库迁移失败，请备份本地数据库并检查磁盘与权限");
     });
 
     let db_arc = Arc::new(db);
@@ -61,7 +62,16 @@ pub fn run_app() {
             ))
         })
         .level(level_filter)
-        .level_for("sqlx", log::LevelFilter::Warn);
+        .level_for("sqlx", log::LevelFilter::Warn)
+        // 网络库调试信息可能含服务地址，统一关闭，业务错误在同步边界脱敏。
+        .level_for("reqwest", log::LevelFilter::Off)
+        .level_for("hyper", log::LevelFilter::Off)
+        .level_for("hyper_util", log::LevelFilter::Off)
+        .level_for("h2", log::LevelFilter::Off)
+        .level_for("tower", log::LevelFilter::Off)
+        .level_for("tower_http", log::LevelFilter::Off)
+        .level_for("rustls", log::LevelFilter::Off)
+        .level_for("tauri", log::LevelFilter::Warn);
 
     #[cfg(debug_assertions)]
     {
@@ -169,6 +179,8 @@ pub fn run_app() {
                 SettingsManager::new(app.handle(), &db_for_settings).await
             });
             app.manage(Arc::new(settings_manager));
+            app.manage(Arc::new(sync::SyncManager::new()?));
+            sync::start(app.handle().clone());
 
             log::debug!("Database path: {}", db_path_str);
             if let Ok(log_dir) = app.path().app_log_dir() {
@@ -366,7 +378,18 @@ pub fn run_app() {
             commands::paste_note,
             commands::open_notepad_window,
             commands::set_notepad_always_on_top,
-            commands::get_notepad_always_on_top
+            commands::get_notepad_always_on_top,
+            sync::get_sync_status,
+            sync::save_sync_options,
+            sync::set_sync_private_input,
+            sync::save_sync_credentials,
+            sync::unlock_sync_credentials,
+            sync::lock_sync_credentials,
+            sync::forget_sync_credentials,
+            sync::test_sync_connection,
+            sync::sync_now,
+            sync::set_sync_note_pending,
+            sync::pause_sync_clipboard
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

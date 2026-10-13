@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>思源插件界面测试</title>
+<style>
+:root{--b3-border-color:#d8dee8;--b3-theme-on-surface:#667085;--b3-theme-primary:#2563eb}body{font:14px system-ui;margin:0;background:#edf0f5;color:#172033}.dialog{margin:16px auto;background:white;border-radius:10px;box-shadow:0 4px 24px #17203318;max-width:calc(100vw - 24px)}h2{font-size:16px;margin:0;padding:16px;border-bottom:1px solid #d8dee8}.b3-dialog__content{padding:16px}.b3-text-field{border:1px solid #d8dee8;border-radius:5px;padding:9px;font:inherit;min-width:0}.b3-button{padding:9px 12px;border:1px solid #cbd5e1;border-radius:5px;background:#2563eb;color:white;cursor:pointer}.b3-button--outline{background:white;color:#172033}.b3-button:disabled{opacity:.45}summary{padding-bottom:8px}details[open]>label{margin:10px 0}
+</style><body><script type="module">
+// 此页面只使用虚拟接口，测试发布包加载、加密表单和手机布局，不接触真实思源文档。
+const storage=new Map();
+const nativeFetch=window.fetch.bind(window);
+window.fetch=async(url,options)=>{
+  if(!String(url).startsWith('/api/'))return nativeFetch(url,options);
+  if(url==='/api/file/getFile'){
+    const value=storage.get(JSON.parse(options.body).path);
+    return new Response(JSON.stringify(value??{code:404,msg:'',data:null}),{status:value?200:202});
+  }
+  if(url==='/api/file/putFile'){
+    storage.set(options.body.get('path'),JSON.parse(await options.body.get('file').text()));
+    return new Response(JSON.stringify({code:0,msg:'',data:null}));
+  }
+  if(url==='/api/file/removeFile'){storage.delete(JSON.parse(options.body).path);return new Response(JSON.stringify({code:0,msg:'',data:null}));}
+  return new Response(JSON.stringify({code:1,msg:'虚拟接口未实现',data:null}));
+};
+window.siyuan={config:{readonly:false},isPublish:false};
+class Plugin{constructor(){this.name='pastepaw-webdav-sync'}addIcons(){}addTopBar(value){window.registeredTopBar=value}addCommand() {}}
+class Setting{constructor(){}}
+class Dialog{constructor(options){this.element=document.createElement('section');this.element.className='dialog';this.element.style.width=options.width;this.element.innerHTML='<h2></h2>'+options.content;this.element.querySelector('h2').textContent=options.title;this.close=options.destroyCallback;document.body.append(this.element)}destroy(){this.close?.();this.element.remove()}}
+const sdk={Plugin,Setting,Dialog,showMessage:(message)=>{window.lastMessage=message},confirm:(_,__,callback)=>callback(),getFrontend:()=>innerWidth<600?'mobile':'desktop'};
+const root=new URL('../dist/',location.href);
+const style=document.createElement('link');style.rel='stylesheet';style.href=new URL('index.css',root);document.head.append(style);
+const code=await(await nativeFetch(new URL('index.js',root))).text();
+const module={exports:{}};new Function('require','module','exports',code)((name)=>{if(name!=='siyuan')throw new Error('未预期的模块');return sdk},module,module.exports);
+window.fixturePlugin=new module.exports();await window.fixturePlugin.onload();window.fixturePlugin.onLayoutReady();await window.fixturePlugin.openDialog();
+window.fixtureStorage=storage;
+</script></body></html>

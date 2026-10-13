@@ -397,6 +397,11 @@ function App() {
   }, [refreshTotalCount]);
 
   useEffect(() => {
+    const unlistenSync = listen('sync-completed', () => {
+      void loadClips(selectedFolderRef.current);
+      void loadFolders();
+      void refreshTotalCount();
+    });
     const unlistenClipboard = listen('clipboard-change', () => {
       refreshCurrentFolder();
       loadFolders(); // Refresh folders to get updated counts
@@ -404,6 +409,7 @@ function App() {
     });
 
     return () => {
+      void unlistenSync.then((stop) => stop());
       unlistenClipboard.then((unlisten) => {
         if (typeof unlisten === 'function') unlisten();
       });

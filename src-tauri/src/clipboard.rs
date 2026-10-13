@@ -168,6 +168,7 @@ async fn process_clipboard_change(
     let mut text_read_ms = 0u128;
     let mut was_existing = false;
     let _guard = CLIPBOARD_SYNC.lock().await;
+    if crate::sync::private_input_active() { return; }
 
     let mut clip_type = "text";
     let mut clip_content = Vec::new();
@@ -314,6 +315,7 @@ async fn process_clipboard_change(
             .unwrap_or(None);
     let db_lookup_ms = db_lookup_started.elapsed().as_millis();
 
+    if crate::sync::private_input_active() { return; }
     let db_write_started = std::time::Instant::now();
     let emitted_id = if let Some(existing_id) = existing_uuid {
         was_existing = true;

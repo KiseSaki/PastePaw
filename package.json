@@ -9,6 +9,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "build:siyuan": "node siyuan-plugin/build.mjs",
+    "test:siyuan": "node --test siyuan-plugin/tests/*.test.mjs",
     "tauri": "tauri",
     "format": "prettier --write \"frontend/src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"frontend/src/**/*.{ts,tsx,css}\""

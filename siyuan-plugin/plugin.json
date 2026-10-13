@@ -1,0 +1,16 @@
+{
+  "name": "pastepaw-webdav-sync",
+  "author": "PastePaw",
+  "version": "0.1.1",
+  "minAppVersion": "3.1.0",
+  "backends": ["windows", "android"],
+  "frontends": ["desktop", "desktop-window", "mobile"],
+  "disabledInPublish": true,
+  "displayName": { "default": "PastePaw WebDAV Sync", "zh-CN": "PastePaw 便签同步" },
+  "description": {
+    "default": "Import PastePaw notes from WebDAV into a selected document.",
+    "zh-CN": "从 WebDAV 手动拉取 PastePaw 全部便签到指定文档，支持加密凭据和重复导入去重。"
+  },
+  "readme": { "default": "README.md", "zh-CN": "README.zh-CN.md" },
+  "keywords": ["PastePaw", "WebDAV", "便签", "同步"]
+}

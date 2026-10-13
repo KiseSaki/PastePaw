@@ -9,6 +9,7 @@ impl Database {
     pub async fn new(db_path: &str) -> Self {
         let options = sqlx::sqlite::SqliteConnectOptions::new()
             .filename(db_path)
+            .pragma("secure_delete", "ON")
             .create_if_missing(true);
 
         let pool = SqlitePool::connect_with(options).await.unwrap();
@@ -205,6 +206,7 @@ impl Database {
         .execute(&self.pool)
         .await;
 
+        crate::sync::store::migrate(&self.pool).await?;
         Ok(())
     }
 

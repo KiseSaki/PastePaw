@@ -129,7 +129,9 @@ const ListKeyboardExtension = Extension.create({
             const itemStart = $from.before(itemDepth);
             const itemEnd = $from.after(itemDepth);
             const tr = state.tr.delete(itemStart, itemEnd);
-            tr.setSelection(TextSelection.create(tr.doc, Math.min(itemStart + 1, tr.doc.content.size)));
+            tr.setSelection(
+              TextSelection.create(tr.doc, Math.min(itemStart + 1, tr.doc.content.size))
+            );
             dispatch(tr);
             return true;
           }
@@ -253,8 +255,16 @@ export function NotepadWindow() {
   colorRef.current = color;
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSaveRef = useRef<{ id: string; title: string; content: string; color: string } | null>(null);
+  const pendingSaveRef = useRef<{
+    id: string;
+    title: string;
+    content: string;
+    color: string;
+    token: number;
+  } | null>(null);
   const opacityRef = useRef<HTMLDivElement>(null);
+  const saveTokenRef = useRef(0);
+  const saveInFlightRef = useRef(0);
 
   // Immediately flushes any pending auto-save before switching notes
   const flushPendingSave = useCallback(async () => {
@@ -265,6 +275,8 @@ export function NotepadWindow() {
     const pending = pendingSaveRef.current;
     if (!pending) return;
     pendingSaveRef.current = null;
+    const saveToken = pending.token;
+    saveInFlightRef.current++;
 
     try {
       const updated = await invoke<NoteItem>('update_note', {
@@ -280,52 +292,76 @@ export function NotepadWindow() {
     } catch (err) {
       console.error('Failed to flush pending auto-save:', err);
     } finally {
+      saveInFlightRef.current--;
+      void invoke('set_sync_note_pending', {
+        id: pending.id,
+        token: saveToken,
+        pending: false,
+      }).catch(() => {});
       setIsSaving(false);
     }
   }, []);
 
   // Debounced auto-save targeting a specific noteId
-  const triggerAutoSave = useCallback((targetNoteId: string, newTitle: string, newContent: string, newColor: string) => {
-    if (!targetNoteId) return;
+  const triggerAutoSave = useCallback(
+    (targetNoteId: string, newTitle: string, newContent: string, newColor: string) => {
+      if (!targetNoteId) return;
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    pendingSaveRef.current = {
-      id: targetNoteId,
-      title: newTitle,
-      content: newContent,
-      color: newColor,
-    };
-
-    setIsSaving(true);
-    saveTimeoutRef.current = setTimeout(async () => {
-      const pending = pendingSaveRef.current;
-      if (!pending || pending.id !== targetNoteId) {
-        setIsSaving(false);
-        return;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
-      pendingSaveRef.current = null;
 
-      try {
-        const updated = await invoke<NoteItem>('update_note', {
-          id: targetNoteId,
-          title: newTitle.trim() || null,
-          content: newContent,
-          color: newColor,
-        });
-        if (activeNoteRef.current?.id === targetNoteId) {
-          activeNoteRef.current = updated;
+      const saveToken = ++saveTokenRef.current;
+      void invoke('set_sync_note_pending', {
+        id: targetNoteId,
+        token: saveToken,
+        pending: true,
+      }).catch(() => {});
+      pendingSaveRef.current = {
+        id: targetNoteId,
+        token: saveToken,
+        title: newTitle,
+        content: newContent,
+        color: newColor,
+      };
+
+      setIsSaving(true);
+      saveTimeoutRef.current = setTimeout(async () => {
+        saveTimeoutRef.current = null;
+        const pending = pendingSaveRef.current;
+        if (!pending || pending.id !== targetNoteId) {
+          setIsSaving(false);
+          return;
         }
-        setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
-      } catch (err) {
-        console.error('Failed to auto-save note:', err);
-      } finally {
-        setIsSaving(false);
-      }
-    }, 300);
-  }, []);
+        pendingSaveRef.current = null;
+        saveInFlightRef.current++;
+
+        try {
+          const updated = await invoke<NoteItem>('update_note', {
+            id: targetNoteId,
+            title: newTitle.trim() || null,
+            content: newContent,
+            color: newColor,
+          });
+          if (activeNoteRef.current?.id === targetNoteId) {
+            activeNoteRef.current = updated;
+          }
+          setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+        } catch (err) {
+          console.error('Failed to auto-save note:', err);
+        } finally {
+          saveInFlightRef.current--;
+          void invoke('set_sync_note_pending', {
+            id: targetNoteId,
+            token: saveToken,
+            pending: false,
+          }).catch(() => {});
+          setIsSaving(false);
+        }
+      }, 300);
+    },
+    []
+  );
 
   // Tiptap Editor Instance
   const editor = useEditor({
@@ -356,7 +392,9 @@ export function NotepadWindow() {
       }),
       ListKeyboardExtension,
       Placeholder.configure({
-        placeholder: t('notepad.contentPlaceholder') || '输入便签内容，支持 Markdown (如 - 列表, 1. 列表, [] 待办, **加粗**)...',
+        placeholder:
+          t('notepad.contentPlaceholder') ||
+          '输入便签内容，支持 Markdown (如 - 列表, 1. 列表, [] 待办, **加粗**)...',
       }),
       Link.configure({
         openOnClick: false,
@@ -375,7 +413,9 @@ export function NotepadWindow() {
 
           try {
             const slice = selection.content();
-            const fragment = DOMSerializer.fromSchema(view.state.schema).serializeFragment(slice.content);
+            const fragment = DOMSerializer.fromSchema(view.state.schema).serializeFragment(
+              slice.content
+            );
             const div = document.createElement('div');
             div.appendChild(fragment);
             const html = div.innerHTML;
@@ -399,7 +439,9 @@ export function NotepadWindow() {
 
           try {
             const slice = selection.content();
-            const fragment = DOMSerializer.fromSchema(view.state.schema).serializeFragment(slice.content);
+            const fragment = DOMSerializer.fromSchema(view.state.schema).serializeFragment(
+              slice.content
+            );
             const div = document.createElement('div');
             div.appendChild(fragment);
             const html = div.innerHTML;
@@ -459,6 +501,7 @@ export function NotepadWindow() {
   // Flush pending auto-save on unmount
   useEffect(() => {
     return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       if (pendingSaveRef.current) {
         const pending = pendingSaveRef.current;
         invoke('update_note', {
@@ -466,7 +509,15 @@ export function NotepadWindow() {
           title: pending.title.trim() || null,
           content: pending.content,
           color: pending.color,
-        }).catch(console.error);
+        })
+          .catch(console.error)
+          .finally(() => {
+            void invoke('set_sync_note_pending', {
+              id: pending.id,
+              token: pending.token,
+              pending: false,
+            }).catch(() => {});
+          });
       }
     };
   }, []);
@@ -557,6 +608,20 @@ export function NotepadWindow() {
       loadNotes(searchQuery);
     });
 
+    const unlistenSync = listen('sync-completed', async () => {
+      const updated = await loadNotes(searchQuery);
+      if (pendingSaveRef.current || saveTimeoutRef.current || saveInFlightRef.current > 0) return;
+      const active = updated.find((note) => note.id === activeNoteRef.current?.id);
+      if (active) void selectNote(active);
+      else if (updated.length > 0) void selectNote(updated[0]);
+      else {
+        activeNoteRef.current = null;
+        setSelectedNoteId(null);
+        setContent('');
+        setTitle('');
+        editor?.commands.setContent('<p></p>', { emitUpdate: false });
+      }
+    });
     const unlistenSelect = listen<string>('select-note', (event) => {
       const noteId = event.payload;
       invoke<NoteItem>('get_note', { id: noteId })
@@ -566,9 +631,10 @@ export function NotepadWindow() {
 
     return () => {
       unlistenNotes.then((f) => f());
+      unlistenSync.then((f) => f());
       unlistenSelect.then((f) => f());
     };
-  }, [loadNotes, searchQuery, selectNote]);
+  }, [editor, loadNotes, searchQuery, selectNote]);
 
   // Title change
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -642,9 +708,7 @@ export function NotepadWindow() {
   const handleToggleComplete = async (id: string) => {
     try {
       const newCompleted = await invoke<boolean>('toggle_complete_note', { id });
-      setNotes((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_completed: newCompleted } : n))
-      );
+      setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, is_completed: newCompleted } : n)));
       if (selectedNoteId === id) {
         setIsCompleted(newCompleted);
       }
@@ -720,9 +784,7 @@ export function NotepadWindow() {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
       const titleMatch = (note.title || '').toLowerCase().includes(q);
-      const contentMatch = extractPlainTextPreview(note.content, 9999)
-        .toLowerCase()
-        .includes(q);
+      const contentMatch = extractPlainTextPreview(note.content, 9999).toLowerCase().includes(q);
       return titleMatch || contentMatch;
     });
   }, [notes, filterStatus, searchQuery]);
@@ -911,7 +973,7 @@ export function NotepadWindow() {
           'relative z-30 flex shrink-0 items-center justify-between bg-background/50 backdrop-blur-md transition-all duration-200 ease-in-out',
           showChrome
             ? 'h-9 border-b border-border/40 px-3 opacity-100'
-            : 'h-0 border-b-0 px-3 py-0 opacity-0 overflow-hidden pointer-events-none'
+            : 'pointer-events-none h-0 overflow-hidden border-b-0 px-3 py-0 opacity-0'
         )}
       >
         {/* Left window drag zone */}
@@ -1025,7 +1087,9 @@ export function NotepadWindow() {
                     />
                     <input
                       type="text"
-                      placeholder={isCompact ? t('notepad.searchCompact') : t('notepad.searchNotes')}
+                      placeholder={
+                        isCompact ? t('notepad.searchCompact') : t('notepad.searchNotes')
+                      }
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full rounded-md border border-border/50 bg-background/60 py-1 pl-7 pr-2 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-amber-500/80"
@@ -1039,7 +1103,7 @@ export function NotepadWindow() {
                       className={clsx(
                         'flex flex-1 items-center justify-center gap-1 rounded py-1 font-medium transition-colors',
                         filterStatus === 'active'
-                          ? 'bg-background text-amber-500 shadow-xs font-semibold'
+                          ? 'shadow-xs bg-background font-semibold text-amber-500'
                           : 'text-muted-foreground hover:text-foreground'
                       )}
                     >
@@ -1051,7 +1115,7 @@ export function NotepadWindow() {
                       className={clsx(
                         'flex flex-1 items-center justify-center gap-1 rounded py-1 font-medium transition-colors',
                         filterStatus === 'completed'
-                          ? 'bg-background text-amber-500 shadow-xs font-semibold'
+                          ? 'shadow-xs bg-background font-semibold text-amber-500'
                           : 'text-muted-foreground hover:text-foreground'
                       )}
                     >
@@ -1095,7 +1159,7 @@ export function NotepadWindow() {
                       className={clsx(
                         'flex h-6 w-6 items-center justify-center rounded transition-colors',
                         filterStatus === 'active'
-                          ? 'bg-amber-500/20 text-amber-500 font-bold'
+                          ? 'bg-amber-500/20 font-bold text-amber-500'
                           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                       )}
                     >
@@ -1107,7 +1171,7 @@ export function NotepadWindow() {
                       className={clsx(
                         'flex h-6 w-6 items-center justify-center rounded transition-colors',
                         filterStatus === 'completed'
-                          ? 'bg-amber-500/20 text-amber-500 font-bold'
+                          ? 'bg-amber-500/20 font-bold text-amber-500'
                           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                       )}
                     >
@@ -1128,8 +1192,8 @@ export function NotepadWindow() {
                       {filterStatus === 'completed'
                         ? t('notepad.noCompletedNotes')
                         : filterStatus === 'active' && notes.length > 0
-                        ? t('notepad.noActiveNotes')
-                        : t('notepad.noNotes')}
+                          ? t('notepad.noActiveNotes')
+                          : t('notepad.noNotes')}
                     </p>
                   )}
                 </div>
@@ -1145,7 +1209,8 @@ export function NotepadWindow() {
                     cleanExplicitTitle ||
                     extractPlainTextPreview(note.content, 40) ||
                     t('notepad.untitled');
-                  const noteSnippet = extractPlainTextPreview(note.content) || `(${t('notepad.empty')})`;
+                  const noteSnippet =
+                    extractPlainTextPreview(note.content) || `(${t('notepad.empty')})`;
                   const taskProgress = getNoteTaskProgress(note.content);
 
                   if (isMini) {
@@ -1204,7 +1269,7 @@ export function NotepadWindow() {
                           <span
                             className={clsx(
                               'truncate text-xs font-medium text-foreground/90',
-                              note.is_completed && 'line-through text-muted-foreground'
+                              note.is_completed && 'text-muted-foreground line-through'
                             )}
                           >
                             {noteTitle}
@@ -1212,7 +1277,7 @@ export function NotepadWindow() {
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
                           {taskProgress && (
-                            <span className="text-[10px] font-mono text-muted-foreground/70">
+                            <span className="font-mono text-[10px] text-muted-foreground/70">
                               {taskProgress.checked}/{taskProgress.total}
                             </span>
                           )}
@@ -1243,7 +1308,7 @@ export function NotepadWindow() {
                           <span
                             className={clsx(
                               'truncate text-xs font-semibold text-foreground/90',
-                              note.is_completed && 'line-through text-muted-foreground'
+                              note.is_completed && 'text-muted-foreground line-through'
                             )}
                           >
                             {noteTitle}
@@ -1253,7 +1318,7 @@ export function NotepadWindow() {
                           {taskProgress && (
                             <span
                               className={clsx(
-                                'flex items-center gap-0.5 rounded px-1 text-[10px] font-mono font-medium',
+                                'flex items-center gap-0.5 rounded px-1 font-mono text-[10px] font-medium',
                                 taskProgress.checked === taskProgress.total
                                   ? 'bg-emerald-500/15 text-emerald-500'
                                   : 'bg-muted/80 text-muted-foreground'
@@ -1365,7 +1430,7 @@ export function NotepadWindow() {
               'flex shrink-0 items-center justify-between bg-background/30 backdrop-blur-sm transition-all duration-200 ease-in-out',
               showChrome
                 ? 'h-9 border-b border-border/40 px-3 opacity-100'
-                : 'h-0 border-b-0 px-3 py-0 opacity-0 overflow-hidden pointer-events-none'
+                : 'pointer-events-none h-0 overflow-hidden border-b-0 px-3 py-0 opacity-0'
             )}
           >
             {/* Title Input & Status Badge */}
@@ -1377,7 +1442,7 @@ export function NotepadWindow() {
                 onChange={handleTitleChange}
                 className={clsx(
                   'min-w-0 flex-1 truncate bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground/40',
-                  isCompleted && 'line-through text-muted-foreground/70'
+                  isCompleted && 'text-muted-foreground/70 line-through'
                 )}
               />
               {isCompleted && (
@@ -1623,7 +1688,7 @@ export function NotepadWindow() {
               'flex shrink-0 select-none items-center justify-between bg-background/40 text-[11px] text-muted-foreground backdrop-blur-sm transition-all duration-200 ease-in-out',
               showChrome
                 ? 'h-8 border-t border-border/40 px-3 opacity-100'
-                : 'h-0 border-t-0 px-3 py-0 opacity-0 overflow-hidden pointer-events-none'
+                : 'pointer-events-none h-0 overflow-hidden border-t-0 px-3 py-0 opacity-0'
             )}
           >
             <div className="flex min-w-0 items-center gap-1.5 truncate text-[11px]">

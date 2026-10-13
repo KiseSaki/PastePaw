@@ -1,0 +1,48 @@
+.pastepaw-sync {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+.pastepaw-sync label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+.pastepaw-sync p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--b3-theme-on-surface);
+  overflow-wrap: anywhere;
+}
+.pastepaw-sync details {
+  border: 1px solid var(--b3-border-color);
+  padding: 12px;
+  border-radius: 6px;
+}
+.pastepaw-sync details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pastepaw-sync summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+.pastepaw-sync__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pastepaw-sync__status {
+  font-size: 13px;
+  color: var(--b3-theme-primary);
+}
+.pastepaw-sync__result {
+  font-size: 13px;
+  line-height: 1.7;
+  min-height: 24px;
+}

@@ -78,11 +78,12 @@ fn clip_to_detail_item(clip: &Clip, full_image_content: Option<&[u8]>) -> Clipbo
 
 async fn delete_clip_image_file_by_uuid(pool: &SqlitePool, clip_uuid: &str) -> Result<(), String> {
     let file_path: Option<String> =
-        sqlx::query_scalar(r#"SELECT file_path FROM clip_images WHERE clip_uuid = ?"#)
+        sqlx::query_scalar::<_, Option<String>>(r#"SELECT file_path FROM clip_images WHERE clip_uuid = ?"#)
             .bind(clip_uuid)
             .fetch_optional(pool)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())?
+            .flatten();
 
     if let Some(path) = file_path {
         if !path.is_empty() {
@@ -707,6 +708,7 @@ pub async fn delete_clip(
     let pool = &db.pool;
 
     if hard_delete {
+        crate::sync::store::mark_clip_deleted(pool, &id).await?;
         delete_clip_image_file_by_uuid(pool, &id).await?;
 
         sqlx::query(r#"DELETE FROM clip_images WHERE clip_uuid = ?"#)
@@ -1049,6 +1051,8 @@ pub async fn clear_all_clips(db: tauri::State<'_, Arc<Database>>) -> Result<(), 
     let pool = &db.pool;
 
     cleanup_all_clip_image_files(pool).await?;
+    sqlx::query("INSERT OR REPLACE INTO sync_tombstones SELECT 'clipboard',uuid,CAST(strftime('%s','now') AS INTEGER)*1000 FROM clips")
+        .execute(pool).await.map_err(|_| "记录剪切板删除状态失败".to_string())?;
 
     sqlx::query(r#"DELETE FROM clip_images"#)
         .execute(pool)

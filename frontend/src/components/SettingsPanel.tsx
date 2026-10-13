@@ -4,14 +4,15 @@ import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { clsx } from 'clsx';
 import {
-    FlaskConical,
-    Folder as FolderIcon,
-    FolderOpen,
-    MoreHorizontal,
-    Plus,
-    Settings as SettingsIcon,
-    Trash2,
-    X,
+  Cloud,
+  FlaskConical,
+  Folder as FolderIcon,
+  FolderOpen,
+  MoreHorizontal,
+  Plus,
+  Settings as SettingsIcon,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,13 +22,14 @@ import { useTheme } from '../hooks/useTheme';
 import { FolderItem, Settings } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Select } from './ui/Select';
+import { SyncPanel } from './SyncPanel';
 
 interface SettingsPanelProps {
   settings: Settings;
   onClose: () => void;
 }
 
-type Tab = 'general' | 'folders';
+type Tab = 'general' | 'folders' | 'sync';
 
 export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -352,12 +354,25 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
                 <FolderIcon size={16} />
                 {t('settings.folders')}
               </button>
+              <button
+                onClick={() => setActiveTab('sync')}
+                className={clsx(
+                  'flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors',
+                  activeTab === 'sync'
+                    ? 'bg-accent text-accent-foreground'
+                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                )}
+              >
+                <Cloud size={16} />
+                WebDAV 同步
+              </button>
             </div>
           </div>
 
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-6">
             <div className="mx-auto max-w-2xl space-y-8">
+              {activeTab === 'sync' && <SyncPanel />}
               {/* --- GENERAL TAB --- */}
               {activeTab === 'general' && (
                 <>
@@ -849,9 +864,7 @@ export function SettingsPanel({ settings: initialSettings, onClose }: SettingsPa
           <span className="text-xs text-muted-foreground">
             PastePaw {appVersion ? `v${appVersion}` : ''}
           </span>
-          <span className="text-xs text-muted-foreground">
-            © 2026 PastePaw • Local & Offline
-          </span>
+          <span className="text-xs text-muted-foreground">© 2026 PastePaw • Local & Offline</span>
         </div>
       </div>
     </>
