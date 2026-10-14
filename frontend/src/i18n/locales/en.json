@@ -254,6 +254,24 @@
       "saveAsset": "Save attachment",
       "assetLimit": "{{name}}: attachments must be between 1 byte and 20 MiB",
       "docChanged": "Content changed. Select a position and insert again"
+    },
+    "conflicts": {
+      "title": "Sync conflicts",
+      "resolved": "Conflict resolved; the result will upload on the next sync",
+      "empty": "No unresolved conflicts",
+      "choose": "Choose a note conflict",
+      "siyuan": "SiYuan",
+      "devices": "Multiple computers",
+      "help": "Both versions are preserved. Choose one, keep both, or edit a merged result. New changes prevent stale decisions.",
+      "original": "Current main version",
+      "other": "Preserved other version",
+      "keepDeletion": "Keep deletion",
+      "keepOriginal": "Keep main version",
+      "keepOther": "Use other version",
+      "keepBoth": "Keep both",
+      "manual": "Merge manually",
+      "saveMerge": "Save merge and resolve",
+      "deleted": "This version was deleted"
     }
   }
 }

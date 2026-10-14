@@ -1,7 +1,7 @@
 {
   "name": "pastepaw-webdav-sync",
   "author": "PastePaw",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": "3.8.6",
   "backends": [
     "windows",
@@ -18,8 +18,8 @@
     "zh-CN": "PastePaw 便签同步"
   },
   "description": {
-    "default": "Import PastePaw notes from WebDAV into a selected document.",
-    "zh-CN": "从 WebDAV 手动拉取 PastePaw 全部便签到指定文档，支持加密凭据和重复导入去重。"
+    "default": "Manually sync PastePaw notes with a selected SiYuan document through WebDAV, with optional bidirectional edits and conflict resolution.",
+    "zh-CN": "通过 WebDAV 手动同步便签与指定思源文档，支持可选双向回传、三方合并和冲突处理。"
   },
   "readme": {
     "default": "README.md",

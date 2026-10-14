@@ -30,6 +30,7 @@ import { useTheme } from '../hooks/useTheme';
 import { noteExtensions, handleNotePaste } from '../editor/extensions';
 import { EditorTools } from '../editor/EditorTools';
 import { insertFiles } from '../editor/assets';
+import { NoteConflictDialog, NoteConflict } from '../components/NoteConflictDialog';
 import { NOTE_COLORS, NoteItem, Settings } from '../types';
 import {
   ensureHtmlContent,
@@ -68,6 +69,21 @@ export function NotepadWindow() {
   useLanguage(settings?.language);
 
   const [notes, setNotes] = useState<NoteItem[]>([]);
+  const [conflicts, setConflicts] = useState<NoteConflict[]>([]);
+  const [showConflicts, setShowConflicts] = useState(false);
+  const refreshConflicts = useCallback(async () => {
+    const rows = await invoke<NoteConflict[]>('get_note_conflicts');
+    setConflicts(rows);
+  }, []);
+  useEffect(() => {
+    void refreshConflicts().catch(() => {});
+    const listener = listen('sync-completed', () => {
+      void refreshConflicts().catch(() => {});
+    });
+    return () => {
+      void listener.then((fn) => fn());
+    };
+  }, [refreshConflicts]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -786,6 +802,7 @@ export function NotepadWindow() {
   // Keyboard Shortcuts inside Notepad Window
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.closest('[role="dialog"]')) return;
       // Ctrl+N: New Note
       if (e.ctrlKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
@@ -1382,6 +1399,17 @@ export function NotepadWindow() {
             </div>
           </div>
 
+          <button
+            type="button"
+            className="px-3 py-1 text-left text-xs text-amber-500 hover:bg-accent"
+            onClick={async () => {
+              await flushPendingSave();
+              await refreshConflicts();
+              setShowConflicts(true);
+            }}
+          >
+            {t('notepad.conflicts.title')} ({conflicts.length})
+          </button>
           {editor && <EditorTools editor={editor} noteId={selectedNoteId} />}
 
           {/* Tiptap Rich Markdown Editor */}
@@ -1429,6 +1457,13 @@ export function NotepadWindow() {
         </main>
       </div>
 
+      {showConflicts && (
+        <NoteConflictDialog
+          conflicts={conflicts}
+          close={() => setShowConflicts(false)}
+          refresh={refreshConflicts}
+        />
+      )}
       <Toaster richColors position="bottom-center" theme={effectiveTheme} />
     </div>
   );

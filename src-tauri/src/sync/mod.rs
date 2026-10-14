@@ -1,3 +1,5 @@
+pub mod conflicts;
+mod note_merge;
 pub mod protocol;
 mod remote;
 pub mod store;
@@ -89,6 +91,7 @@ pub struct SyncReport {
     pub notes: usize,
     pub clips: usize,
     pub conflicts: usize,
+    pub merged: usize,
     pub skipped: usize,
     pub used_bytes: u64,
     pub finished_at: String,
@@ -397,6 +400,7 @@ fn same_document(a: &Document, b: &Document) -> bool {
         && a.policy == b.policy
         && a.note_assets == b.note_assets
         && a.schema_version == b.schema_version
+        && a.note_conflicts == b.note_conflicts
 }
 fn encoded(document: &Document) -> Result<Vec<u8>, String> {
     document.validate()?;
@@ -545,8 +549,8 @@ async fn execute(app: &AppHandle, credentials: Credentials) -> Result<SyncReport
         cleanup(&remote, &mut lease, &protected, &mut inventory).await?;
         let local_notes =
             store::capture(&db.pool, "notes", &notes_base, &policy, &credentials).await?;
-        let (merged_notes, note_conflicts) =
-            merge(&notes_base, &local_notes.document, &notes, true);
+        let (merged_notes, note_conflicts, auto_merged) =
+            merge_detailed(&notes_base, &local_notes.document, &notes, true);
         // 先完整上传和验证资源，再发布正文索引；失败时远端原正文仍然可读。
         for (hash, asset) in &merged_notes.note_assets {
             let path = format!("note-assets/{hash}.bin");
@@ -619,8 +623,8 @@ async fn execute(app: &AppHandle, credentials: Credentials) -> Result<SyncReport
         }
         let local_clips =
             store::capture(&db.pool, "clipboard", &clips_base, &policy, &credentials).await?;
-        let (mut merged_clips, clip_conflicts) =
-            merge(&clips_base, &local_clips.document, &clips, false);
+        let (mut merged_clips, clip_conflicts, _) =
+            merge_detailed(&clips_base, &local_clips.document, &clips, false);
         for record in merged_clips.records.values_mut() {
             let sensitive = record
                 .data
@@ -813,6 +817,7 @@ async fn execute(app: &AppHandle, credentials: Credentials) -> Result<SyncReport
             notes: merged_notes.records.values().filter(|r| !r.deleted).count(),
             clips: merged_clips.records.values().filter(|r| !r.deleted).count(),
             conflicts: note_conflicts + clip_conflicts,
+            merged: auto_merged,
             skipped,
             used_bytes: used(&inventory),
             finished_at: chrono::Utc::now().to_rfc3339(),

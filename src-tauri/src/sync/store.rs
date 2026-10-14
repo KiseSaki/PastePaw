@@ -56,6 +56,7 @@ pub async fn migrate(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             .execute(pool)
             .await?;
     }
+    super::conflicts::migrate(pool).await?;
     Ok(())
 }
 
@@ -91,15 +92,19 @@ pub async fn baseline(
     }
 }
 
-fn note_data(note: &Note) -> NoteData {
+pub(crate) fn note_data(note: &Note) -> NoteData {
     NoteData {
         title: note.title.clone(),
         content: note.content.clone(),
         color: note.color.clone(),
         is_pinned: note.is_pinned,
         is_completed: note.is_completed,
-        created_at: note.created_at.to_rfc3339(),
-        updated_at: note.updated_at.to_rfc3339(),
+        created_at: note
+            .created_at
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        updated_at: note
+            .updated_at
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     }
 }
 
@@ -152,6 +157,11 @@ pub async fn capture(
     policy: &CloudPolicy,
     credentials: &Credentials,
 ) -> Result<Capture, String> {
+    let note_conflicts = if kind == "notes" {
+        super::conflicts::local(pool, &base.space_id).await?
+    } else {
+        BTreeMap::new()
+    };
     let mut tx = pool.begin().await.map_err(db_error)?;
     let mut document = Document::new(base.space_id.clone());
     let mut checks = BTreeMap::new();
@@ -165,7 +175,8 @@ pub async fn capture(
             .map_err(db_error)?;
     let aliases: BTreeMap<String, String> = aliases.into_iter().collect();
     if kind == "notes" {
-        document.schema_version = 2;
+        document.schema_version = 3;
+        document.note_conflicts = note_conflicts;
         let estimate: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(length(CAST(content AS BLOB))+length(CAST(title AS BLOB))+512),0) FROM notes")
             .fetch_one(&mut *tx).await.map_err(db_error)?;
         if estimate > MAX_DOCUMENT as i64 {
@@ -417,6 +428,12 @@ pub async fn apply(
         None => Document::new(merged.space_id.clone()),
     };
     let mut next_base = merged.clone();
+    if kind == "notes" {
+        for (id, conflict) in &merged.note_conflicts {
+            sqlx::query("INSERT INTO sync_note_conflicts(space_id,id,data) VALUES(?,?,?) ON CONFLICT(space_id,id) DO UPDATE SET data=excluded.data")
+                .bind(&merged.space_id).bind(id).bind(serde_json::to_string(conflict).map_err(|_| "冲突编码失败")?).execute(&mut *tx).await.map_err(db_error)?;
+        }
+    }
     let mut folder_ids = BTreeMap::new();
     if kind == "clipboard" {
         for (id, folder) in &merged.folders {
@@ -718,7 +735,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(local.document.schema_version, 2);
+        assert_eq!(local.document.schema_version, 3);
         assert_eq!(local.document.note_assets[&asset.hash], asset);
         let mut remote = local.document.clone();
         remote.records.get_mut(&id).unwrap().revision = uuid::Uuid::new_v4().to_string();

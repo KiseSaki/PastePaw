@@ -393,6 +393,8 @@ pub fn run_app() {
             sync::sync_now,
             sync::set_sync_note_pending,
             sync::pause_sync_clipboard,
+            sync::conflicts::get_note_conflicts,
+            sync::conflicts::resolve_note_conflict,
             note_assets::store_note_asset,
             note_assets::read_note_asset,
             note_assets::save_note_asset,

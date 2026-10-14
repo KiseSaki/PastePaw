@@ -1,0 +1,65 @@
+[
+  {
+    "name": "不同段落",
+    "base": "<p>甲段</p><p>乙段</p>",
+    "local": "<p>甲段修改</p><p>乙段</p>",
+    "remote": "<p>甲段</p><p>乙段修改</p>",
+    "expected": "<p>甲段修改</p><p>乙段修改</p>"
+  },
+  {
+    "name": "不同待办项",
+    "base": "<ul><li data-checked=\"false\">甲</li><li data-checked=\"false\">乙</li></ul>",
+    "local": "<ul><li data-checked=\"true\">甲</li><li data-checked=\"false\">乙</li></ul>",
+    "remote": "<ul><li data-checked=\"false\">甲</li><li data-checked=\"true\">乙</li></ul>",
+    "expected": "<ul><li data-checked=\"true\">甲</li><li data-checked=\"true\">乙</li></ul>"
+  },
+  {
+    "name": "同一位置插入冲突",
+    "base": "<p>甲</p>",
+    "local": "<p>甲乙</p>",
+    "remote": "<p>甲丙</p>",
+    "expected": null
+  },
+  {
+    "name": "同一区域替换冲突",
+    "base": "<p>原始正文</p>",
+    "local": "<p>电脑正文</p>",
+    "remote": "<p>手机正文</p>",
+    "expected": null
+  },
+  {
+    "name": "相同修改不重复",
+    "base": "<p>甲</p>",
+    "local": "<p>甲乙</p>",
+    "remote": "<p>甲乙</p>",
+    "expected": "<p>甲乙</p>"
+  },
+  {
+    "name": "标记与正文独立",
+    "base": "<p>文字</p><p>后文</p>",
+    "local": "<p><strong>文字</strong></p><p>后文</p>",
+    "remote": "<p>文字</p><p>修改后文</p>",
+    "expected": "<p><strong>文字</strong></p><p>修改后文</p>"
+  },
+  {
+    "name": "Unicode和实体",
+    "base": "<p>猫😀&amp;狗</p><p>乙</p>",
+    "local": "<p>猫😀&amp;狗🐶</p><p>乙</p>",
+    "remote": "<p>猫😀&amp;狗</p><p>乙甲</p>",
+    "expected": "<p>猫😀&amp;狗🐶</p><p>乙甲</p>"
+  },
+  {
+    "name": "代码空白保真",
+    "base": "<pre><code>  a\n\n\n  b\n</code></pre>",
+    "local": "<pre><code>  A\n\n\n  b\n</code></pre>",
+    "remote": "<pre><code>  a\n\n\n  B\n</code></pre>",
+    "expected": "<pre><code>  A\n\n\n  B\n</code></pre>"
+  },
+  {
+    "name": "属性中的尖括号",
+    "base": "<p><a href=\"https://example.invalid/?q=>\">甲</a></p><p>乙</p>",
+    "local": "<p><a href=\"https://example.invalid/?q=>\">甲甲</a></p><p>乙</p>",
+    "remote": "<p><a href=\"https://example.invalid/?q=>\">甲</a></p><p>乙乙</p>",
+    "expected": "<p><a href=\"https://example.invalid/?q=>\">甲甲</a></p><p>乙乙</p>"
+  }
+]

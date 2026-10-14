@@ -254,6 +254,24 @@
       "saveAsset": "另存附件",
       "assetLimit": "{{name}}：单个附件须为 1 字节至 20 MiB",
       "docChanged": "正文已变化，请重新选择位置插入附件"
+    },
+    "conflicts": {
+      "title": "同步冲突",
+      "resolved": "冲突已处理，结果将在下次同步上传",
+      "empty": "没有待处理冲突",
+      "choose": "选择冲突便签",
+      "siyuan": "思源",
+      "devices": "多台电脑",
+      "help": "两版内容均已保留。选择一版、保留两版，或编辑合并结果；期间发生的新修改会阻止过期操作。",
+      "original": "当前主版本",
+      "other": "保留的另一版本",
+      "keepDeletion": "保留删除结果",
+      "keepOriginal": "保留主版本",
+      "keepOther": "采用另一版本",
+      "keepBoth": "两版都保留",
+      "manual": "手动合并",
+      "saveMerge": "保存合并并处理冲突",
+      "deleted": "此版本已删除"
     }
   }
 }

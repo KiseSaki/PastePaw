@@ -4,7 +4,7 @@ import { assetReferences } from '../../shared/noteMarkdown.js';
 
 export function assetConverter(document, credentials, api, signal) {
   const uploaded = new Map();
-  return async (html) => {
+  const convert = async (html) => {
     for (const id of assetReferences(html)) {
       if (uploaded.has(id)) continue;
       const asset = document.note_assets?.[id];
@@ -64,4 +64,6 @@ export function assetConverter(document, credentials, api, signal) {
     }
     return htmlToMarkdown(html, (id) => uploaded.get(id));
   };
+  convert.paths = uploaded;
+  return convert;
 }

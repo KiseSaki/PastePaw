@@ -31,6 +31,7 @@ interface Status {
     notes: number;
     clips: number;
     conflicts: number;
+    merged: number;
     skipped: number;
     used_bytes: number;
     finished_at: string;
@@ -426,7 +427,8 @@ export function SyncPanel() {
           <p>最近完成：{new Date(status.last_result.finished_at).toLocaleString()}</p>
           <p>
             便签 {status.last_result.notes} 条 · 剪切板 {status.last_result.clips} 条 · 冲突{' '}
-            {status.last_result.conflicts} 条 · 跳过/淘汰 {status.last_result.skipped} 条
+            {status.last_result.conflicts} 条 · 自动合并 {status.last_result.merged || 0} 条 ·
+            跳过/淘汰 {status.last_result.skipped} 条
           </p>
           <p>云端文件占用 {(status.last_result.used_bytes / 1024 / 1024).toFixed(2)} MiB</p>
         </div>

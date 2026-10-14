@@ -170,7 +170,7 @@ export async function loadNotes(credentials, api, signal) {
 export function validateNotes(document) {
   if (
     !document ||
-    ![1, 2].includes(document.schema_version) ||
+    ![1, 2, 3].includes(document.schema_version) ||
     !UUID.test(document.space_id) ||
     !document.records ||
     typeof document.records !== 'object' ||
@@ -183,7 +183,7 @@ export function validateNotes(document) {
     fail('附件索引格式异常');
   for (const [id, asset] of Object.entries(assets)) {
     if (
-      document.schema_version !== 2 ||
+      document.schema_version < 2 ||
       !/^[a-f0-9]{64}$/.test(id) ||
       asset.hash !== id ||
       !Number.isInteger(asset.size) ||
@@ -198,6 +198,29 @@ export function validateNotes(document) {
       )
     )
       fail('附件标识或参数异常');
+  }
+  const conflicts = document.note_conflicts || {};
+  if (
+    typeof conflicts !== 'object' ||
+    Array.isArray(conflicts) ||
+    Object.keys(conflicts).length > 100000
+  )
+    fail('冲突索引格式异常');
+  for (const [id, conflict] of Object.entries(conflicts)) {
+    if (
+      document.schema_version !== 3 ||
+      !UUID.test(id) ||
+      conflict.copy_uuid !== id ||
+      !UUID.test(conflict.original_uuid) ||
+      id === conflict.original_uuid ||
+      !Array.isArray(conflict.revisions) ||
+      conflict.revisions.length !== 2 ||
+      conflict.revisions.some((rev) => !UUID.test(rev)) ||
+      typeof conflict.resolved !== 'boolean' ||
+      !['device', 'siyuan'].includes(conflict.source) ||
+      (conflict.resolution_revision !== null && !UUID.test(conflict.resolution_revision))
+    )
+      fail('冲突记录结构异常');
   }
   for (const [id, record] of Object.entries(document.records)) {
     if (
@@ -261,7 +284,7 @@ export function canonical(text) {
 export function renderNote(data, markdown, key, revision) {
   const title = escapeMarkdown(data.title || '未命名便签');
   const details = `创建：${data.created_at} · 更新：${data.updated_at}${data.is_pinned ? ' · 已置顶' : ''}${data.is_completed ? ' · 已完成' : ''}`;
-  return `{{{row\n\n## ${title}\n\n${details}\n\n${markdown || '（空便签）'}\n\n}}}\n{: ${ATTR.key}="${key}" ${ATTR.revision}="${revision}" ${ATTR.state}="pending"}`;
+  return `{{{row\n\n## ${title}\n{: custom-pastepaw-part="title"}\n\n${details}\n{: custom-pastepaw-part="info"}\n\n${markdown || '（空便签）'}\n\n}}}\n{: ${ATTR.key}="${key}" ${ATTR.revision}="${revision}" ${ATTR.state}="pending"}`;
 }
 
 async function existingBlocks(api, documentId, signal) {
@@ -290,7 +313,8 @@ export async function importNotes(
   api,
   convertHtml,
   signal,
-  progress = () => {}
+  progress = () => {},
+  options = {}
 ) {
   validateNotes(document);
   if (!BLOCK_ID.test(documentId)) fail('请填写思源文档 ID，例如 20261013120000-abcdefg');
@@ -302,6 +326,10 @@ export async function importNotes(
   for (let index = 0; index < entries.length; index++) {
     if (signal?.aborted) fail('同步已取消');
     const [uuid, record] = entries[index];
+    if (options.skip?.(uuid)) {
+      result.skipped++;
+      continue;
+    }
     const key = document.space_id + ':' + uuid;
     const ids = known.get(key) || [];
     if (ids.length > 1) {
@@ -318,6 +346,7 @@ export async function importNotes(
         attrs[ATTR.hash] &&
         attrs[ATTR.state] !== 'pending'
       ) {
+        if (options.onNote) await options.onNote(uuid, id, record);
         result.skipped++;
         progress(index + 1, entries.length);
         continue;
@@ -326,7 +355,8 @@ export async function importNotes(
       if (
         typeof kramdown !== 'string' ||
         !attrs[ATTR.hash] ||
-        (await hash(canonical(kramdown))) !== attrs[ATTR.hash]
+        ((await hash(canonical(kramdown))) !== attrs[ATTR.hash] &&
+          !(await options.acceptModified?.(uuid, id, await hash(canonical(kramdown)))))
       ) {
         result.conflicts++;
         progress(index + 1, entries.length);
@@ -347,6 +377,7 @@ export async function importNotes(
       }
       const archived =
         kramdown.slice(0, end) + '\n\n> 来源便签已删除，思源内容已保留。\n' + kramdown.slice(end);
+      await options.beforeUpdate?.(uuid, id);
       await api('/api/block/updateBlock', { id, dataType: 'markdown', data: archived }, signal);
       result.archived++;
     } else {
@@ -357,6 +388,7 @@ export async function importNotes(
         record.revision
       );
       if (id) {
+        await options.beforeUpdate?.(uuid, id);
         await api('/api/block/updateBlock', { id, dataType: 'markdown', data: markdown }, signal);
         result.updated++;
       } else {
@@ -390,6 +422,7 @@ export async function importNotes(
       signal
     );
     progress(index + 1, entries.length);
+    await options.onNote?.(uuid, id, record);
   }
   return result;
 }

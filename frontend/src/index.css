@@ -707,3 +707,97 @@ li[data-checked='true'] > div {
   color: #94a3b8;
   font-style: italic;
 }
+.note-conflict-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #0008;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+.note-conflict-dialog {
+  width: min(1000px, 98vw);
+  max-height: 94vh;
+  overflow-y: auto;
+  background: hsl(var(--popover));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 12px;
+}
+.note-conflict-dialog > header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+.note-conflict-dialog > header button {
+  margin-left: auto;
+}
+.note-conflict-dialog > select {
+  width: 100%;
+  background: hsl(var(--background));
+  padding: 6px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  margin-bottom: 7px;
+}
+.note-conflict-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+.note-conflict-compare h3 {
+  color: #f59e0b;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.note-conflict-version {
+  border: 1px solid hsl(var(--border));
+  border-radius: 5px;
+  padding: 10px;
+  min-height: 100px;
+  max-height: 300px;
+  overflow: auto;
+}
+.note-conflict-version h4 {
+  font-weight: 600;
+  border-bottom: 1px solid hsl(var(--border));
+  padding-bottom: 5px;
+  margin-bottom: 8px;
+}
+.note-conflict-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.note-conflict-actions button,
+.note-conflict-merge > button {
+  padding: 6px 10px;
+  background: hsl(var(--accent));
+  border-radius: 4px;
+}
+.note-conflict-merge {
+  border: 1px solid hsl(var(--border));
+  margin-top: 10px;
+  padding: 10px;
+}
+.note-conflict-merge > input {
+  width: 100%;
+  padding: 6px;
+  background: hsl(var(--background));
+  border-bottom: 1px solid hsl(var(--border));
+}
+.note-conflict-merge .tiptap {
+  padding: 10px;
+  min-height: 160px;
+}
+@media (max-width: 650px) {
+  .note-conflict-compare {
+    grid-template-columns: 1fr;
+  }
+}

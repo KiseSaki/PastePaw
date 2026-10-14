@@ -119,6 +119,20 @@ pub struct Document {
     pub policy: Option<CloudPolicy>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub note_assets: BTreeMap<String, crate::note_assets::Asset>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub note_conflicts: BTreeMap<String, NoteConflict>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct NoteConflict {
+    pub original_uuid: String,
+    pub copy_uuid: String,
+    pub revisions: Vec<String>,
+    pub other_title: String,
+    pub base: Option<Value>,
+    pub source: String,
+    pub resolved: bool,
+    pub resolution_revision: Option<String>,
 }
 
 impl Document {
@@ -131,10 +145,11 @@ impl Document {
             folders: BTreeMap::new(),
             policy: None,
             note_assets: BTreeMap::new(),
+            note_conflicts: BTreeMap::new(),
         }
     }
     pub fn validate(&self) -> Result<(), String> {
-        if !matches!(self.schema_version, 1 | 2)
+        if !matches!(self.schema_version, 1..=3)
             || Uuid::parse_str(&self.space_id).is_err()
             || self.records.len() > 100_000
             || self.generation >= u64::MAX - 1
@@ -159,8 +174,32 @@ impl Document {
         }
         for (hash, asset) in &self.note_assets {
             asset.validate()?;
-            if hash != &asset.hash || self.schema_version != 2 {
+            if hash != &asset.hash || self.schema_version < 2 {
                 return Err("便签附件索引版本或标识不一致".into());
+            }
+        }
+        if self.note_conflicts.len() > 100_000 {
+            return Err("冲突记录过多".into());
+        }
+        for (id, conflict) in &self.note_conflicts {
+            if self.schema_version != 3
+                || id != &conflict.copy_uuid
+                || conflict.original_uuid == conflict.copy_uuid
+                || [id.as_str(), conflict.original_uuid.as_str()]
+                    .iter()
+                    .any(|s| Uuid::parse_str(s).is_err())
+                || conflict.revisions.len() != 2
+                || conflict
+                    .revisions
+                    .iter()
+                    .any(|r| Uuid::parse_str(r).is_err())
+                || !["device", "siyuan"].contains(&conflict.source.as_str())
+                || conflict
+                    .resolution_revision
+                    .as_ref()
+                    .is_some_and(|r| Uuid::parse_str(r).is_err())
+            {
+                return Err("冲突记录结构异常".into());
             }
         }
         Ok(())
@@ -205,42 +244,87 @@ pub fn valid_asset(hash: &str) -> bool {
 }
 
 // 以同步基线判断双方修改；冲突副本的 ID 可重复计算，重试不会不断产生副本。
-pub fn merge(
+pub fn merge_detailed(
     base: &Document,
     local: &Document,
     remote: &Document,
     notes: bool,
-) -> (Document, usize) {
+) -> (Document, usize, usize) {
     let mut result = remote.clone();
     let mut conflicts = 0;
+    let mut auto_merged = 0;
+    for (id, conflict) in &local.note_conflicts {
+        if !result.note_conflicts.get(id).is_some_and(|c| c.resolved) {
+            result.note_conflicts.insert(id.clone(), conflict.clone());
+        }
+    }
     for (id, entry) in &local.records {
         let before = base.records.get(id);
         let theirs = remote.records.get(id);
         if before.is_some_and(|b| b.same_content(entry)) {
             continue;
         }
+        if notes
+            && result
+                .note_conflicts
+                .values()
+                .any(|c| c.original_uuid == *id && c.revisions.contains(&entry.revision))
+        {
+            // 已保存或已处理过的旧版本不能因断网重试或离线设备再次产生同一冲突。
+            continue;
+        }
         if theirs.is_none() || theirs == before || theirs.is_some_and(|r| r.same_content(entry)) {
             result.records.insert(id.clone(), entry.clone());
             continue;
         }
-        conflicts += 1;
         let theirs = theirs.unwrap();
         if notes {
-            if let Some(data) = &entry.data {
-                let fingerprint =
-                    digest(format!("{id}:{}:{}", entry.revision, theirs.revision).as_bytes());
-                let bytes = Sha256::digest(fingerprint.as_bytes());
-                let conflict_id = Uuid::from_bytes(bytes[..16].try_into().unwrap()).to_string();
+            if let Some(merged) =
+                before.and_then(|b| super::note_merge::merge_record(b, entry, theirs))
+            {
+                result.records.insert(id.clone(), merged);
+                auto_merged += 1;
+                continue;
+            }
+        }
+        conflicts += 1;
+        if notes {
+            {
+                let mut revisions = vec![entry.revision.clone(), theirs.revision.clone()];
+                revisions.sort();
+                let conflict_id = super::note_merge::revision_id(&format!(
+                    "conflict:{id}:{}:{}",
+                    revisions[0], revisions[1]
+                ));
+                let title = entry
+                    .data
+                    .as_ref()
+                    .or_else(|| before.and_then(|b| b.data.as_ref()))
+                    .or(theirs.data.as_ref())
+                    .and_then(|d| d.get("title"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("便签")
+                    .to_owned();
+                result.note_conflicts.insert(
+                    conflict_id.clone(),
+                    NoteConflict {
+                        original_uuid: id.clone(),
+                        copy_uuid: conflict_id.clone(),
+                        revisions,
+                        other_title: title.clone(),
+                        base: before.and_then(|b| b.data.clone()),
+                        source: "device".into(),
+                        resolved: false,
+                        resolution_revision: None,
+                    },
+                );
                 let mut copy = entry.clone();
-                let mut data = data.clone();
-                if let Some(obj) = data.as_object_mut() {
-                    let title = obj.get("title").and_then(Value::as_str).unwrap_or("便签");
+                if let Some(obj) = copy.data.as_mut().and_then(Value::as_object_mut) {
                     obj.insert(
                         "title".into(),
                         Value::String(format!("{title}（同步冲突）")),
                     );
                 }
-                copy.data = Some(data);
                 result.records.insert(conflict_id, copy);
             }
         } else if entry.updated_at > theirs.updated_at
@@ -256,7 +340,7 @@ pub fn merge(
     }
     result.generation = remote.generation + 1;
     if notes {
-        result.schema_version = 2;
+        result.schema_version = 3;
         result.note_assets.extend(local.note_assets.clone());
         let refs: std::collections::BTreeSet<String> = result
             .records
@@ -267,7 +351,18 @@ pub fn merge(
             .collect();
         result.note_assets.retain(|hash, _| refs.contains(hash));
     }
-    (result, conflicts)
+    (result, conflicts, auto_merged)
+}
+
+#[cfg(test)]
+pub fn merge(
+    base: &Document,
+    local: &Document,
+    remote: &Document,
+    notes: bool,
+) -> (Document, usize) {
+    let (doc, conflicts, _) = merge_detailed(base, local, remote, notes);
+    (doc, conflicts)
 }
 
 pub fn limit_clips(document: &mut Document, policy: &CloudPolicy) -> Result<usize, String> {
@@ -371,6 +466,85 @@ pub fn limit_clips(document: &mut Document, policy: &CloudPolicy) -> Result<usiz
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn resolved_conflicts_survive_stale_devices_and_do_not_reappear() {
+        let id = Uuid::new_v4().to_string();
+        let mut base = Document::new(Uuid::new_v4().to_string());
+        base.records.insert(
+            id.clone(),
+            Record::new(Some(
+                serde_json::json!({"title":"原始","content":"<p>原文</p>"}),
+            )),
+        );
+        let mut local = base.clone();
+        local.records.insert(
+            id.clone(),
+            Record::new(Some(
+                serde_json::json!({"title":"原始","content":"<p>本地</p>"}),
+            )),
+        );
+        let mut remote = base.clone();
+        remote.records.insert(
+            id.clone(),
+            Record::new(Some(
+                serde_json::json!({"title":"原始","content":"<p>远端</p>"}),
+            )),
+        );
+        let (mut resolved, count, _) = merge_detailed(&base, &local, &remote, true);
+        assert_eq!(count, 1);
+        let copy = resolved.note_conflicts.keys().next().unwrap().clone();
+        resolved.note_conflicts.get_mut(&copy).unwrap().resolved = true;
+        resolved
+            .note_conflicts
+            .get_mut(&copy)
+            .unwrap()
+            .resolution_revision = Some(Uuid::new_v4().to_string());
+        resolved.records.insert(copy, Record::new(None));
+        resolved.records.insert(
+            id.clone(),
+            Record::new(Some(
+                serde_json::json!({"title":"原始","content":"<p>手工合并</p>"}),
+            )),
+        );
+        let (again, count, _) = merge_detailed(&base, &local, &resolved, true);
+        assert_eq!(count, 0);
+        assert_eq!(again.records, resolved.records);
+        assert_eq!(again.note_conflicts, resolved.note_conflicts);
+        let mut stale = local.clone();
+        stale.note_conflicts = remote.note_conflicts.clone();
+        assert_eq!(
+            merge_detailed(&base, &stale, &resolved, true)
+                .0
+                .note_conflicts,
+            resolved.note_conflicts
+        );
+    }
+    #[test]
+    fn local_delete_and_remote_edit_preserve_deletion_as_a_resolvable_version() {
+        let id = Uuid::new_v4().to_string();
+        let mut base = Document::new(Uuid::new_v4().to_string());
+        base.records.insert(
+            id.clone(),
+            Record::new(Some(
+                serde_json::json!({"title":"原始","content":"<p>原文</p>"}),
+            )),
+        );
+        let mut local = base.clone();
+        local.records.insert(id.clone(), Record::new(None));
+        let mut remote = base.clone();
+        remote.records.insert(
+            id.clone(),
+            Record::new(Some(
+                serde_json::json!({"title":"原始","content":"<p>编辑后</p>"}),
+            )),
+        );
+        let (doc, count, _) = merge_detailed(&base, &local, &remote, true);
+        assert_eq!(count, 1);
+        let conflict = doc.note_conflicts.values().next().unwrap();
+        assert!(doc.records[&conflict.copy_uuid].deleted);
+        assert_eq!(doc.records[&id], remote.records[&id]);
+        doc.validate().unwrap();
+    }
     #[test]
     fn simultaneous_note_edits_and_delete_preserve_content() {
         let id = Uuid::new_v4().to_string();

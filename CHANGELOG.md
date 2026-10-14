@@ -2,6 +2,32 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.6.0
+
+### Added
+- **Optional SiYuan Return Sync**: Plugin 0.3.0 manually returns changes from bound note regions through WebDAV, including titles, rich text, tasks and attachments. Ordinary blocks can be explicitly created as new notes; detaching or deleting a SiYuan region preserves the cloud note.
+- **Conflict Review**: The note window and plugin compare preserved versions and support keeping either version, keeping both or manually merging. Stale decisions are refused and resolved-version markers prevent repeated conflict copies from offline retries.
+
+### Improved
+- **Three-Way Merge Across Devices**: Use the common baseline to combine independent fields and non-overlapping body edits. Overlapping edits, uncertain structures and delete/edit conflicts retain versions for review instead of silently choosing the newest clock.
+- **Safe Return Writes**: Share the native cloud lease and conditional-write checks, verify uploaded bytes and enforce attachment/cloud limits. Checkpoints recover interrupted bindings; unsupported SiYuan content and edits during synchronization remain preserved.
+
+### Upgrade Notes
+- Upgrade all computers to PastePaw 1.6.0 and the plugin to 0.3.0 (SiYuan 3.8.6 or later). Notes migrate to format 3; old clients pause synchronization. Existing vaults remain usable. Bidirectional plugin synchronization is opt-in and needs a writable WebDAV account.
+- Document baseline files contain note content, not connection credentials. Real Windows/Android SiYuan conversion and the user's server still need installation testing. See [the plugin guide](siyuan-plugin/README.zh-CN.md).
+
+### 新增
+- **可选思源回传同步**：插件 0.3.0 点击按钮将已绑定便签区域的标题、富文本、待办及附件回传 WebDAV。普通块可明确创建为新便签，解除绑定或删除思源区域保留云端便签。
+- **冲突比较与处理**：便签窗口和插件均可比较两版、保留一版、保留两版或手动合并；拒绝过期决策，持久保存处理标记，避免离线重试反复生成冲突副本。
+
+### 改进
+- **多端三方合并**：使用共同基线合并独立字段和不重叠的正文修改；重叠编辑、结构无法确认或编辑与删除冲突保留版本供处理，不凭设备时间静默覆盖。
+- **回传写入保护**：与电脑端共用云端租约和条件校验，校验上传内容并遵守附件/总容量限制。检查点恢复中断绑定，保留不支持的思源内容及同步期间的新编辑。
+
+### 升级说明
+- 所有电脑升级至 PastePaw 1.6.0，插件升级至 0.3.0（思源 3.8.6 或更新版本）。便签格式迁移为 3，旧客户端暂停同步；已有加密凭据继续使用。插件双向同步默认关闭，开启需要 WebDAV 写权限。
+- 文档基线包含便签内容，不含连接凭据；真实 Windows/安卓思源转换及用户服务器仍需安装验收。见[插件说明](siyuan-plugin/README.zh-CN.md)。
+
 ## v1.5.0
 
 ### Added

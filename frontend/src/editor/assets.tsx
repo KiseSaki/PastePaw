@@ -148,12 +148,13 @@ export async function insertFiles(editor: Editor, files: File[]) {
 }
 
 const lowlight = createLowlight(common);
-function CodeView({ node, updateAttributes }: NodeViewProps) {
+function CodeView({ node, updateAttributes, editor }: NodeViewProps) {
   const { t } = useTranslation();
   return (
     <NodeViewWrapper className="note-code-frame">
       <div className="note-code-toolbar" contentEditable={false}>
         <select
+          disabled={!editor.isEditable}
           aria-label={t('notepad.editor.codeLanguage')}
           value={node.attrs.language || ''}
           onChange={(e) => updateAttributes({ language: e.target.value || null })}
