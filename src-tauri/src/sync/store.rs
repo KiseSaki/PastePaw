@@ -238,7 +238,7 @@ pub async fn capture(
             );
         }
         let clips: Vec<Clip> = sqlx::query_as(
-            "SELECT * FROM clips WHERE is_deleted=0 ORDER BY created_at DESC,uuid LIMIT ?",
+            "SELECT * FROM clips WHERE is_deleted=0 ORDER BY julianday(created_at) DESC,uuid LIMIT ?",
         )
         .bind(policy.max_clips as i64)
         .fetch_all(&mut *tx)
@@ -538,7 +538,7 @@ pub async fn apply(
                 if let Some(value) = &record.data {
                     let data: ClipData =
                         serde_json::from_value(value.clone()).map_err(|_| "远端剪切板内容异常")?;
-                    current = sqlx::query_as("SELECT * FROM clips WHERE content_hash=? AND clip_type=? AND is_deleted=0 ORDER BY created_at DESC LIMIT 1")
+                    current = sqlx::query_as("SELECT * FROM clips WHERE content_hash=? AND clip_type=? AND is_deleted=0 ORDER BY julianday(created_at) DESC LIMIT 1")
                         .bind(data.content_hash).bind(data.clip_type).fetch_optional(&mut *tx).await.map_err(db_error)?;
                     local_id = current
                         .as_ref()

@@ -2,6 +2,18 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.6.1
+
+### Fixed
+- **Intermittent Clipboard Capture**: Wait and retry when clipboard text/images are temporarily unavailable. Cancel stale reads when another copy occurs, and reread the latest system version after delayed rendering.
+- **Capture Deduplication**: Commit the saved clipboard version only after successful persistence. New copy/cut operations with existing text can move the entry to the front; recent self-pastes preserve the original source.
+- **History Ordering and Retention**: Parse mixed SQLite/ISO timestamps before pagination, search, eviction and sync selection. Save new captures with subsecond UTC timestamps so recently captured content is not hidden behind older records or evicted incorrectly.
+
+### 修复
+- **剪切板偶发漏记**：文字或图片暂时不可读时等待重试；新的复制到来时取消旧读取，延迟渲染导致系统版本变化后重新读取最新内容。
+- **采集去重状态**：成功保存后才提交已处理版本；重新复制或剪切已有正文也能更新位置，程序近期自行粘贴保留原来源。
+- **历史排序与保留**：分页、搜索、淘汰及同步选择前解析混用的 SQLite/ISO 时间。新采集使用带亚秒精度的 UTC 时间，避免新内容被旧记录挡住或错误淘汰。
+
 ## v1.6.0
 
 ### Added

@@ -206,6 +206,9 @@ impl Database {
         .execute(&self.pool)
         .await;
 
+        // 索引依赖旧版数据库升级后的置顶列，必须在列迁移之后创建。
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_clips_active_order ON clips(is_deleted,is_pinned DESC,julianday(created_at) DESC,id DESC)")
+            .execute(&self.pool).await?;
         crate::sync::store::migrate(&self.pool).await?;
         crate::note_assets::migrate(&self.pool).await?;
         Ok(())

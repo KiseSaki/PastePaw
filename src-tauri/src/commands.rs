@@ -147,7 +147,7 @@ pub async fn enforce_clipboard_limits(
             r#"
             DELETE FROM clips
             WHERE folder_id IS NULL AND is_deleted = 0
-              AND created_at < datetime('now', '-' || ? || ' days')
+              AND julianday(created_at) < julianday('now', '-' || ? || ' days')
             "#,
         )
         .bind(auto_delete_days)
@@ -165,7 +165,7 @@ pub async fn enforce_clipboard_limits(
               AND id NOT IN (
                   SELECT id FROM clips
                   WHERE folder_id IS NULL AND is_deleted = 0
-                  ORDER BY created_at DESC
+                  ORDER BY julianday(created_at) DESC, id DESC
                   LIMIT ?
               )
             "#,
@@ -301,6 +301,48 @@ async fn load_full_image_content(pool: &SqlitePool, clip: &mut Clip) -> Result<V
     Err("Image content missing".to_string())
 }
 
+// 历史时间同时存在 SQLite 与带时区的 ISO 格式，必须先按时间解析，再分页。
+async fn query_clip_page(
+    pool: &sqlx::SqlitePool,
+    folder: Option<&str>,
+    search: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<Clip>, String> {
+    let mut query =
+        sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT * FROM clips WHERE is_deleted=0");
+    if let Some(folder) = folder {
+        let Ok(id) = folder.parse::<i64>() else {
+            return Ok(Vec::new());
+        };
+        query.push(" AND folder_id=").push_bind(id);
+    }
+    if let Some(search) = search {
+        let pattern = format!("%{search}%");
+        query
+            .push(" AND (text_preview LIKE ")
+            .push_bind(pattern.clone())
+            .push(" OR content LIKE ")
+            .push_bind(pattern)
+            .push(")");
+    }
+    query.push(if search.is_none() {
+        " ORDER BY is_pinned DESC,julianday(created_at) DESC,id DESC"
+    } else {
+        " ORDER BY julianday(created_at) DESC,id DESC"
+    });
+    query
+        .push(" LIMIT ")
+        .push_bind(limit)
+        .push(" OFFSET ")
+        .push_bind(offset);
+    query
+        .build_query_as::<Clip>()
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn get_clips(
     filter_id: Option<String>,
@@ -320,43 +362,7 @@ pub async fn get_clips(
     );
 
     let sql_started = Instant::now();
-    let clips: Vec<Clip> = match filter_id.as_deref() {
-        Some(id) => {
-            let folder_id_num = id.parse::<i64>().ok();
-            if let Some(numeric_id) = folder_id_num {
-                log::info!("Querying for folder_id: {}", numeric_id);
-                sqlx::query_as(
-                    r#"
-                    SELECT * FROM clips WHERE is_deleted = 0 AND folder_id = ?
-                    ORDER BY is_pinned DESC, created_at DESC LIMIT ? OFFSET ?
-                "#,
-                )
-                .bind(numeric_id)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(pool)
-                .await
-                .map_err(|e| e.to_string())?
-            } else {
-                log::info!("Unknown folder_id, returning empty");
-                Vec::new()
-            }
-        }
-        None => {
-            log::info!("Querying for items, offset: {}, limit: {}", offset, limit);
-            sqlx::query_as(
-                r#"
-                SELECT * FROM clips WHERE is_deleted = 0
-                ORDER BY is_pinned DESC, created_at DESC LIMIT ? OFFSET ?
-            "#,
-            )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?
-        }
-    };
+    let clips = query_clip_page(pool, filter_id.as_deref(), None, limit, offset).await?;
     let sql_ms = sql_started.elapsed().as_millis();
 
     log::info!("DB: Found {} clips", clips.len());
@@ -862,41 +868,8 @@ pub async fn search_clips(
     let pool = &db.pool;
     let started = Instant::now();
 
-    let search_pattern = format!("%{}%", query);
-
     let sql_started = Instant::now();
-    let clips: Vec<Clip> = match filter_id.as_deref() {
-        Some(id) => {
-            let folder_id_num = id.parse::<i64>().ok();
-            if let Some(numeric_id) = folder_id_num {
-                sqlx::query_as(r#"
-                    SELECT * FROM clips WHERE is_deleted = 0 AND folder_id = ? AND (text_preview LIKE ? OR content LIKE ?)
-                    ORDER BY created_at DESC LIMIT ? OFFSET ?
-                "#)
-                .bind(numeric_id)
-                .bind(&search_pattern)
-                .bind(&search_pattern)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(pool).await.map_err(|e| e.to_string())?
-            } else {
-                Vec::new()
-            }
-        }
-        None => sqlx::query_as(
-            r#"
-                SELECT * FROM clips WHERE is_deleted = 0 AND (text_preview LIKE ? OR content LIKE ?)
-                ORDER BY created_at DESC LIMIT ? OFFSET ?
-            "#,
-        )
-        .bind(&search_pattern)
-        .bind(&search_pattern)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?,
-    };
+    let clips = query_clip_page(pool, filter_id.as_deref(), Some(&query), limit, offset).await?;
     let sql_ms = sql_started.elapsed().as_millis();
 
     // Batch fetch image paths
@@ -1627,4 +1600,79 @@ pub async fn get_notepad_always_on_top(
 ) -> Result<bool, String> {
     let val = db.get_setting("notepad_always_on_top").await;
     Ok(val.map(|v| v == "true").unwrap_or(true))
+}
+
+#[cfg(test)]
+mod clipboard_history_tests {
+    use super::*;
+    async fn fixture() -> Database {
+        let db = Database {
+            pool: SqlitePool::connect("sqlite::memory:").await.unwrap(),
+        };
+        db.migrate().await.unwrap();
+        db
+    }
+    async fn insert(pool: &SqlitePool, id: &str, at: &str) {
+        sqlx::query("INSERT INTO clips(uuid,clip_type,content,text_preview,content_hash,created_at) VALUES(?,'text',x'61','测试正文',?,?)").bind(id).bind(id).bind(at).execute(pool).await.unwrap();
+    }
+    #[tokio::test]
+    async fn mixed_timestamp_formats_are_ordered_before_pagination_in_history_and_search() {
+        let db = fixture().await;
+        for i in 0..30 {
+            insert(
+                &db.pool,
+                &format!("旧记录{i}"),
+                &format!("2026-10-15T01:{i:02}:00.000Z"),
+            )
+            .await;
+        }
+        insert(&db.pool, "最新剪切", "2026-10-15 02:30:00").await;
+        let page = query_clip_page(&db.pool, None, None, 20, 0).await.unwrap();
+        assert_eq!(page[0].uuid, "最新剪切");
+        assert_eq!(page.len(), 20);
+        let tail = query_clip_page(&db.pool, None, None, 20, 20).await.unwrap();
+        assert_eq!(tail.len(), 11);
+        assert!(tail.iter().all(|c| page.iter().all(|p| p.uuid != c.uuid)));
+        let search = query_clip_page(&db.pool, None, Some("测试正文"), 20, 0)
+            .await
+            .unwrap();
+        assert_eq!(search[0].uuid, "最新剪切");
+        sqlx::query("INSERT INTO folders(id,name) VALUES(99,'分组')")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE clips SET folder_id=99 WHERE uuid='最新剪切'")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            query_clip_page(&db.pool, Some("99"), Some("测试"), 20, 0)
+                .await
+                .unwrap()[0]
+                .uuid,
+            "最新剪切"
+        );
+        assert!(query_clip_page(&db.pool, Some("不存在的分组"), None, 20, 0)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+    #[tokio::test]
+    async fn history_eviction_keeps_actual_newest_and_expiry_honors_timezone() {
+        let db = fixture().await;
+        insert(&db.pool, "旧ISO", "2026-10-15T01:00:00Z").await;
+        insert(&db.pool, "新SQLite", "2026-10-15 02:00:00").await;
+        enforce_clipboard_limits(&db.pool, 1, 0).await.unwrap();
+        let page = query_clip_page(&db.pool, None, None, 20, 0).await.unwrap();
+        assert_eq!(page.len(), 1);
+        assert_eq!(page[0].uuid, "新SQLite");
+        let past = (chrono::Utc::now() - chrono::Duration::days(2)).to_rfc3339();
+        insert(&db.pool, "应过期ISO", &past).await;
+        enforce_clipboard_limits(&db.pool, 0, 1).await.unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM clips WHERE uuid='应过期ISO'")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
 }

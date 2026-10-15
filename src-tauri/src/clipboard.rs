@@ -27,7 +27,7 @@ use windows::Win32::Storage::FileSystem::{
     GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW,
 };
 #[cfg(target_os = "windows")]
-use windows::Win32::System::DataExchange::GetClipboardOwner;
+use windows::Win32::System::DataExchange::{GetClipboardOwner, GetClipboardSequenceNumber};
 #[cfg(target_os = "windows")]
 use windows::Win32::System::ProcessStatus::{GetModuleBaseNameW, GetModuleFileNameExW};
 #[cfg(target_os = "windows")]
@@ -48,10 +48,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 // GLOBAL STATE: Store the hash of the clip we just pasted ourselves.
 // If the next clipboard change matches this hash, we ignore it (don't update timestamp).
-static IGNORE_HASH: Lazy<parking_lot::Mutex<Option<String>>> =
+static IGNORE_HASH: Lazy<parking_lot::Mutex<Option<(String, std::time::Instant)>>> =
     Lazy::new(|| parking_lot::Mutex::new(None));
-static LAST_STABLE_HASH: Lazy<parking_lot::Mutex<Option<String>>> =
-    Lazy::new(|| parking_lot::Mutex::new(None));
+static LAST_SAVED_CAPTURE: Lazy<parking_lot::Mutex<crate::clipboard_capture::SavedCapture>> =
+    Lazy::new(|| parking_lot::Mutex::new(Default::default()));
 pub static CLIPBOARD_SYNC: Lazy<Arc<tokio::sync::Mutex<()>>> =
     Lazy::new(|| Arc::new(tokio::sync::Mutex::new(())));
 
@@ -60,7 +60,7 @@ static DEBOUNCE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn set_ignore_hash(hash: String) {
     let mut lock = IGNORE_HASH.lock();
-    *lock = Some(hash);
+    *lock = Some((hash, std::time::Instant::now()));
 }
 
 pub fn init(app: &AppHandle, db: Arc<Database>) {
@@ -85,27 +85,57 @@ pub fn init(app: &AppHandle, db: Arc<Database>) {
     app.listen(event_name, move |_event| {
         let app = app_clone.clone();
         let db = db_clone.clone();
+        let mut sequence = unsafe { GetClipboardSequenceNumber() };
+        log::info!("CLIPBOARD: Change notification, sequence={}", sequence);
 
         // Capture source app info IMMEDIATELY at event time, before debounce delay.
         // If we wait until after the delay, the user may have already switched to PastePaw,
         // causing frontmostApplication to return our own app instead of the real source.
-        let source_app_info = get_clipboard_owner_app_info();
+        let mut source_app_info = get_clipboard_owner_app_info();
 
         // DEBOUNCE LOGIC:
-        let current_count = DEBOUNCE_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
+        let mut current_count = DEBOUNCE_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
 
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
-            if DEBOUNCE_COUNTER.load(Ordering::SeqCst) != current_count {
-                log::debug!(
-                    "CLIPBOARD: Debounce: Aborting older event, current_count:{}",
-                    current_count
-                );
-                return;
+                if DEBOUNCE_COUNTER.load(Ordering::SeqCst) != current_count {
+                    log::debug!(
+                        "CLIPBOARD: Debounce: Aborting older event, current_count:{}",
+                        current_count
+                    );
+                    return;
+                }
+
+                process_clipboard_change(
+                    app.clone(),
+                    db.clone(),
+                    source_app_info.clone(),
+                    current_count,
+                    sequence,
+                )
+                .await;
+                let next_sequence = unsafe { GetClipboardSequenceNumber() };
+                if next_sequence == sequence || crate::sync::private_input_active() {
+                    return;
+                }
+                // 延迟渲染也可能推进系统版本；重新读取最新来源，不能把内容直接归给旧来源。
+                if DEBOUNCE_COUNTER
+                    .compare_exchange(
+                        current_count,
+                        current_count + 1,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    )
+                    .is_err()
+                {
+                    return;
+                }
+                current_count += 1;
+                sequence = next_sequence;
+                source_app_info = get_clipboard_owner_app_info();
             }
-
-            process_clipboard_change(app, db, source_app_info).await;
         });
     });
 }
@@ -157,19 +187,22 @@ fn read_clipboard_image_fast() -> Result<ClipboardImageRead, String> {
     read_clipboard_image_with_clipboard_rs("clipboard-rs-image")
 }
 
-async fn process_clipboard_change(
-    app: AppHandle,
-    db: Arc<Database>,
-    source_app_info: SourceAppInfo,
-) {
-    let started = std::time::Instant::now();
+struct CapturedContent {
+    clip_type: &'static str,
+    clip_content: Vec<u8>,
+    full_image_content: Option<Vec<u8>>,
+    clip_preview: String,
+    clip_hash: String,
+    metadata: String,
+    image_read_ms: u128,
+    image_decode_ms: u128,
+    text_read_ms: u128,
+}
+
+async fn read_clipboard_content() -> Option<CapturedContent> {
     let mut image_read_ms = 0u128;
     let mut image_decode_ms = 0u128;
     let mut text_read_ms = 0u128;
-    let mut was_existing = false;
-    let _guard = CLIPBOARD_SYNC.lock().await;
-    if crate::sync::private_input_active() { return; }
-
     let mut clip_type = "text";
     let mut clip_content = Vec::new();
     let mut full_image_content: Option<Vec<u8>> = None;
@@ -234,28 +267,71 @@ async fn process_clipboard_change(
     }
 
     if !found_content {
-        return;
+        return None;
     }
+    Some(CapturedContent {
+        clip_type,
+        clip_content,
+        full_image_content,
+        clip_preview,
+        clip_hash,
+        metadata,
+        image_read_ms,
+        image_decode_ms,
+        text_read_ms,
+    })
+}
 
-    // Stable Hash Check
-    {
-        let mut lock = LAST_STABLE_HASH.lock();
-        if let Some(ref last_hash) = *lock {
-            if last_hash == &clip_hash {
-                return;
-            }
+async fn process_clipboard_change(
+    app: AppHandle,
+    db: Arc<Database>,
+    source_app_info: SourceAppInfo,
+    event: u64,
+    sequence: u32,
+) {
+    let started = std::time::Instant::now();
+    let mut was_existing = false;
+    let _guard = CLIPBOARD_SYNC.lock().await;
+    let current = || {
+        DEBOUNCE_COUNTER.load(Ordering::SeqCst) == event
+            && !crate::sync::private_input_active()
+            && (sequence == 0 || unsafe { GetClipboardSequenceNumber() } == sequence)
+    };
+    let delays = [50, 100, 200, 400].map(std::time::Duration::from_millis);
+    let Some(CapturedContent {
+        clip_type,
+        clip_content,
+        full_image_content,
+        clip_preview,
+        clip_hash,
+        metadata,
+        image_read_ms,
+        image_decode_ms,
+        text_read_ms,
+    }) = crate::clipboard_capture::read_with_retry(read_clipboard_content, current, &delays).await
+    else {
+        if current() {
+            log::info!(
+                "CLIPBOARD: No readable text/image after bounded retries, sequence={}",
+                sequence
+            );
         }
-        *lock = Some(clip_hash.clone());
+        return;
+    };
+
+    // 同一系统剪切板版本的重复通知才去重；新一次复制相同正文仍更新历史位置。
+    if LAST_SAVED_CAPTURE.lock().contains(sequence, &clip_hash) {
+        return;
     }
 
     // Check ignore self-paste
     {
         let mut lock = IGNORE_HASH.lock();
-        if let Some(ignore_hash) = lock.take() {
-            if ignore_hash == clip_hash {
-                log::debug!(
-                    "CLIPBOARD: Detected self-paste, proceeding to update timestamp"
-                );
+        if let Some((ignore_hash, at)) = lock.take() {
+            if ignore_hash == clip_hash && at.elapsed() <= std::time::Duration::from_secs(2) {
+                // 粘贴命令已更新历史位置；不覆盖原来源，也不长期屏蔽相同正文。
+                log::debug!("CLIPBOARD: Ignored recent self-paste");
+                return;
             }
         }
     }
@@ -308,22 +384,31 @@ async fn process_clipboard_change(
 
     let db_lookup_started = std::time::Instant::now();
     let existing_uuid: Option<String> =
-        sqlx::query_scalar::<_, String>(r#"SELECT uuid FROM clips WHERE content_hash = ?"#)
+        match sqlx::query_scalar::<_, String>(r#"SELECT uuid FROM clips WHERE content_hash = ?"#)
             .bind(&clip_hash)
             .fetch_optional(pool)
             .await
-            .unwrap_or(None);
+        {
+            Ok(id) => id,
+            Err(_) => {
+                log::error!("CLIPBOARD: Failed to query history; capture was not committed");
+                return;
+            }
+        };
     let db_lookup_ms = db_lookup_started.elapsed().as_millis();
 
-    if crate::sync::private_input_active() { return; }
+    if !current() {
+        return;
+    }
     let db_write_started = std::time::Instant::now();
+    let captured_at = chrono::Utc::now();
     let emitted_id = if let Some(existing_id) = existing_uuid {
         was_existing = true;
         if clip_type == "image" {
-            let _ = sqlx::query(
+            let saved = sqlx::query(
                 r#"
                 UPDATE clips
-                SET created_at = CURRENT_TIMESTAMP,
+                SET created_at = ?,
                     is_deleted = 0,
                     source_app = ?,
                     source_icon = ?,
@@ -334,6 +419,7 @@ async fn process_clipboard_change(
                 WHERE uuid = ?
                 "#,
             )
+            .bind(captured_at)
             .bind(&source_app)
             .bind(&source_icon)
             .bind(&clip_content)
@@ -342,11 +428,15 @@ async fn process_clipboard_change(
             .bind(&existing_id)
             .execute(pool)
             .await;
+            if saved.is_err() {
+                log::error!("CLIPBOARD: Failed to update image history");
+                return;
+            }
 
             if let Some(full_bytes) = &full_image_content {
                 match persist_full_image_file(&existing_id, full_bytes) {
                     Ok(file_path) => {
-                        let _ = sqlx::query(
+                        let saved = sqlx::query(
                             r#"
                             INSERT OR REPLACE INTO clip_images (clip_uuid, full_content, file_path, file_size, storage_kind, mime_type, created_at)
                             VALUES (?, x'', ?, ?, 'file', 'image/png', CURRENT_TIMESTAMP)
@@ -357,6 +447,10 @@ async fn process_clipboard_change(
                         .bind(full_bytes.len() as i64)
                         .execute(pool)
                         .await;
+                        if saved.is_err() {
+                            log::error!("CLIPBOARD: Failed to save image metadata");
+                            return;
+                        }
                     }
                     Err(e) => {
                         log::error!(
@@ -364,25 +458,31 @@ async fn process_clipboard_change(
                             existing_id,
                             e
                         );
+                        return;
                     }
                 }
             }
         } else {
-            let _ = sqlx::query(r#"UPDATE clips SET created_at = CURRENT_TIMESTAMP, is_deleted = 0, source_app = ?, source_icon = ? WHERE uuid = ?"#)
+            let saved = sqlx::query(r#"UPDATE clips SET created_at = ?, is_deleted = 0, source_app = ?, source_icon = ? WHERE uuid = ?"#)
+                .bind(captured_at)
                 .bind(&source_app)
                 .bind(&source_icon)
                 .bind(&existing_id)
                 .execute(pool)
                 .await;
+            if saved.is_err() {
+                log::error!("CLIPBOARD: Failed to update text history");
+                return;
+            }
         }
         existing_id
     } else {
         let clip_uuid = Uuid::new_v4().to_string();
 
-        let _ = sqlx::query(
+        let saved = sqlx::query(
             r#"
             INSERT INTO clips (uuid, clip_type, content, text_preview, content_hash, folder_id, is_deleted, is_thumbnail, source_app, source_icon, metadata, created_at, last_accessed)
-            VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&clip_uuid)
@@ -398,14 +498,20 @@ async fn process_clipboard_change(
         } else {
             None
         })
+        .bind(captured_at)
+        .bind(captured_at)
         .execute(pool)
         .await;
+        if saved.is_err() {
+            log::error!("CLIPBOARD: Failed to insert history");
+            return;
+        }
 
         if clip_type == "image" {
             if let Some(full_bytes) = &full_image_content {
                 match persist_full_image_file(&clip_uuid, full_bytes) {
                     Ok(file_path) => {
-                        let _ = sqlx::query(
+                        let saved = sqlx::query(
                             r#"
                             INSERT OR REPLACE INTO clip_images (clip_uuid, full_content, file_path, file_size, storage_kind, mime_type, created_at)
                             VALUES (?, x'', ?, ?, 'file', 'image/png', CURRENT_TIMESTAMP)
@@ -416,6 +522,10 @@ async fn process_clipboard_change(
                         .bind(full_bytes.len() as i64)
                         .execute(pool)
                         .await;
+                        if saved.is_err() {
+                            log::error!("CLIPBOARD: Failed to save new image metadata");
+                            return;
+                        }
                     }
                     Err(e) => {
                         log::error!(
@@ -435,6 +545,7 @@ async fn process_clipboard_change(
         clip_uuid
     };
     let db_write_ms = db_write_started.elapsed().as_millis();
+    LAST_SAVED_CAPTURE.lock().commit(sequence, clip_hash);
 
     let emit_started = std::time::Instant::now();
     let _ = app.emit(

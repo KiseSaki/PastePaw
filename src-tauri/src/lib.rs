@@ -16,6 +16,7 @@ static IS_ANIMATING: AtomicBool = AtomicBool::new(false);
 static LAST_SHOW_TIME: AtomicI64 = AtomicI64::new(0);
 
 mod clipboard;
+mod clipboard_capture;
 mod commands;
 mod constants;
 mod database;
