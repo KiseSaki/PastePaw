@@ -1,262 +1,183 @@
 <h1 align="center">
-    <picture>
-      <img src="https://raw.githubusercontent.com/XueshiQiao/PastePaw/refs/heads/main/src-tauri/icons/64x64.png" alt="Claude-Mem" width="32">
-    </picture>
-    PastePaw - Clipboard History Manager
+  <img src="src-tauri/icons/64x64.png" alt="PastePaw 图标" width="40">
+  PastePaw
 </h1>
 
+<p align="center">面向 Windows 的剪贴板历史与便签工具</p>
+<p align="center">保存复制内容，整理便签，按需通过自己的 WebDAV 服务同步。</p>
 
 <p align="center">
-  <a href="README_CN.md">中文</a> •
-  <a href="README.md">English</a>
+  <a href="README.md">中文</a> ·
+  <a href="README_EN.md">English</a>
 </p>
 
-> This repository is a modified fork of [XueshiQiao/PastePaw](https://github.com/XueshiQiao/PastePaw).
+<p align="center">
+  <a href="https://github.com/KiseSaki/PastePaw/actions/workflows/release.yml?branch=main"><img src="https://img.shields.io/github/actions/workflow/status/KiseSaki/PastePaw/release.yml?branch=main&style=flat" alt="构建状态"></a>
+  <a href="https://github.com/KiseSaki/PastePaw/releases"><img src="https://img.shields.io/github/v/release/KiseSaki/PastePaw?include_prereleases&style=flat" alt="GitHub 发布版本"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg?style=flat" alt="GNU GPL v3 许可证"></a>
+</p>
+
+> 本仓库基于 [XueshiQiao/PastePaw](https://github.com/XueshiQiao/PastePaw) 修改并持续维护。
 >
-> The original project and this fork are distributed under the GNU GPL v3 license.
-> This fork contains modifications maintained by KiseSaki since 2026.
+> 原项目及本 Fork 均按照 GNU GPL v3 许可证发布。
+> 本仓库包含自 2026 年起由 KiseSaki 维护的修改内容。
+>
+> 本分支独立维护 Windows 版本，重点扩展便签编辑、WebDAV 同步与思源集成。
+> 本文档于 2026 年 10 月 22 日重写，以说明本分支的功能与使用方式。
 
-<p align="center">
-  <a href="https://github.com/KiseSaki/PastePaw/actions/workflows/release.yml?branch=main"><img src="https://img.shields.io/github/actions/workflow/status/KiseSaki/PastePaw/release.yml?branch=main&style=flat" alt="CI status"></a>
-  <a href="https://github.com/KiseSaki/PastePaw/releases"><img src="https://img.shields.io/github/v/release/KiseSaki/PastePaw?include_prereleases&style=flat" alt="GitHub release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL3.0-blue.svg?style=flat" alt="MIT License"></a>
-</p>
+[下载安装](https://github.com/KiseSaki/PastePaw/releases) · [更新记录](CHANGELOG.md) · [反馈问题](https://github.com/KiseSaki/PastePaw/issues)
 
-A beautiful clipboard history manager for Windows, built with Rust + Tauri + React + TypeScript.
+## 主要功能
 
-Also available for **macOS** on the [App Store](https://apps.apple.com/us/app/pastepaw/id6759132043?mt=12) — visit [pastepaw.com](https://pastepaw.com/) for more.
+### 剪贴板历史
 
-## Privacy & Offline Guarantee
+- 自动记录复制的文本和图片，通过搜索找回历史内容。
+- 支持置顶和文件夹分类，整理经常使用的内容。
+- 支持键盘选择、数字快捷取用与纯文本粘贴，可在设置中开启自动粘贴。
+- 支持自定义呼出快捷键、多显示器定位、深色与浅色主题，以及 Windows Mica 窗口效果。
+- 支持忽略指定应用，并可配置历史保留策略。
 
-> **PastePaw operates fully offline at runtime.** Clipboard history, notes, images, and settings are stored locally. The application does not include telemetry, analytics, automatic update checks, cloud synchronization, or background network requests.
+### 独立便签
 
-## Features
+- 支持富文本编辑、Markdown 粘贴与复制，以及可嵌套的无序、有序和待办列表。
+- 支持标题、引用、代码块、表格、链接、高亮和正文查找替换；可直接粘贴 Excel 表格。
+- 支持插入图片、粘贴截图和添加文件附件，附件可另存。
+- 支持块移动、复制、拖动与折叠，以及便签的置顶、进行中和已完成分类。
 
-- 🔒 **100% Local & Offline** - All clipboard data, images, notes, and settings stay on your machine
-- 🎨 **Beautiful UI** - Modern dark/light theme with native Windows Mica & Mica-Alt window effects
-- ⚡ **Fast & Lightweight** - Built with Rust for performance
-- 📋 **Clipboard History** - Automatically saves everything you copy
-- 📝 **Built-in Notepad** - Rich-text scratchpad with Markdown & checklist support
-- 🖥️ **Support multiple Displays** - Show on the active display
-- 🔍 **Search** - Quickly find previously copied content
-- 📁 **Folders** - Organize clips into custom folders
-- 🚫 **Application Exceptions** - Ignore content from specific sensitive apps (e.g., Password Managers)
-- ⌨️ **Customizable Hotkey** - Set your preferred shortcut to open the history
-- 🔄 **Infinite Scroll** - Seamlessly browse through unlimited history
-- 🛡️ **Smart Filtering** - Intelligent debounce logic to ignore "Ghost Copies" from other clipboard tools
+详细操作见[便签编辑器说明](docs/note-editor.md)。
 
-## Screenshots
+### 可选 WebDAV 同步与思源集成
 
-![docs/paste_paw_dark.png](docs/screenshot_win_panes.png)
+- 使用自己的 WebDAV 服务，在多台电脑间同步便签、附件及选定额度内的剪贴板历史。
+- 支持配置剪贴板条数、图片大小和云端容量；并发编辑时尝试合并独立修改，冲突内容保留供比较与处理。
+- 提供思源插件，默认手动单向拉取便签，也可选择手动双向同步已绑定的便签区域。
 
-### Light theme
-![docs/paste_paw_dark.png](docs/screenshot_win_light.png)
-### Dark theme
-![docs/paste_paw_dark.png](docs/screenshot_win_dark.png)
+同步默认关闭。配置方法、服务器要求和功能边界见 [WebDAV 同步说明](docs/webdav-sync.md)与[思源插件说明](siyuan-plugin/README.zh-CN.md)。实际 Windows、安卓思源及个人服务器环境仍需按文档中的验收项验证。
 
+## 界面预览
 
-## Installation Guide
+![PastePaw 界面概览](docs/screenshot_win_panes.png)
 
-### 1. Install via Winget
+<details>
+<summary>查看浅色与深色主题</summary>
 
-The Winget package currently points to the upstream version:
+### 浅色主题
+
+![PastePaw 浅色主题](docs/screenshot_win_light.png)
+
+### 深色主题
+
+![PastePaw 深色主题](docs/screenshot_win_dark.png)
+
+</details>
+
+## 下载与安装
+
+本分支提供 Windows x64 和 ARM64 安装包。
+
+1. 打开[本仓库的 GitHub Releases](https://github.com/KiseSaki/PastePaw/releases)，选择需要安装的版本。
+2. 根据电脑架构下载安装包：大多数 Intel / AMD 电脑选择文件名以 `x64-setup.exe` 结尾的安装包；Windows ARM 电脑选择 `arm64-setup.exe`。
+3. 运行安装程序，启动后使用默认快捷键 `Ctrl+Shift+V` 呼出剪贴板窗口。
+
+`winget install XueshiQiao.PastePaw` 是上游项目的安装入口。如需使用本分支的便签与同步功能，请使用本仓库 Releases 中的安装包。
+
+发布说明可能附有 VirusTotal 检测链接，可用于查看对应安装包的检测结果。
+
+### 升级
+
+升级前建议备份本地数据。使用同步功能时，还应备份 WebDAV 专用目录和本地加密凭据文件，保存位置见下文及[同步说明](docs/webdav-sync.md)。
+
+本地剪贴板历史、便签和图片默认保存在 `%APPDATA%\PastePaw`。从本分支 v1.4.3 或更早版本升级时，建议先卸载旧版本再安装新版，具体说明见[更新记录](CHANGELOG.md)。
+
+使用便签同步格式 3 时，参与同步的电脑需要 PastePaw 1.6.0 或更新版本；思源插件需要 0.3.0 或更新版本，思源需要 3.8.6 或更新版本。
+
+## 开始使用
+
+1. 复制文本或图片，然后按 `Ctrl+Shift+V` 打开历史记录。
+2. 搜索或选择需要的内容，双击卡片或按 `Enter` 将其写入系统剪贴板；开启“自动粘贴”后，会尝试直接粘贴到目标应用。
+3. 在剪贴板窗口按 `Ctrl+N` 打开便签，记录待办、整理文字或插入图片。
+4. 需要多设备同步时，进入“设置 → WebDAV 同步”，按[同步说明](docs/webdav-sync.md)配置服务并测试连接。
+
+自动粘贴默认关闭，可在设置中开启。能否直接粘贴取决于目标应用对粘贴操作的支持。
+
+### 常用快捷键
+
+全局快捷键默认为 `Ctrl+Shift+V`，可在设置中自定义。下表其余快捷键在对应窗口内使用。
+
+| 使用位置 | 快捷键 | 操作 |
+| --- | --- | --- |
+| 全局 | `Ctrl+Shift+V` | 显示或隐藏剪贴板窗口 |
+| 剪贴板窗口 | `Ctrl+F` | 打开搜索 |
+| 剪贴板窗口 | `Ctrl+N` | 打开便签 |
+| 剪贴板窗口 | `←` / `→` | 切换选中卡片 |
+| 剪贴板窗口 | `Enter` | 取用选中项；未选择时取用第一项 |
+| 剪贴板窗口 | `Shift+Enter` | 以纯文本方式取用内容 |
+| 剪贴板窗口 | `Ctrl+1` 至 `Ctrl+9` | 取用当前列表中的第 1 至第 9 项 |
+| 剪贴板窗口 | `1` 至 `9` | 未聚焦输入框时，取用对应序号的内容 |
+| 剪贴板窗口 | `P` | 置顶或取消置顶 |
+| 剪贴板窗口 | `Delete` | 删除选中的记录 |
+| 剪贴板窗口 | `Esc` | 隐藏窗口 |
+| 便签编辑器 | `Ctrl+F` / `Ctrl+H` | 查找 / 替换当前便签正文 |
+| 便签编辑器 | `Ctrl+K` | 编辑链接 |
+| 便签窗口 | `Ctrl+D` | 切换当前便签的完成状态 |
+
+剪贴板窗口中的左右键、置顶、删除和 `Enter` 取用操作在未聚焦输入框时生效；编辑器内的更多操作见[便签编辑器说明](docs/note-editor.md)。
+
+## 数据与隐私
+
+剪贴板历史与便签的核心功能可离线使用，数据默认保存在本机。启用并解锁 WebDAV 同步后，程序会按配置上传、下载及自动同步数据，因此启用同步时会产生网络请求。
+
+| 数据 | 保存与传输方式 |
+| --- | --- |
+| 剪贴板历史、便签与图片 | 默认保存在本机；启用同步后，按配置同步到自己的 WebDAV 服务 |
+| WebDAV 连接信息 | 在客户端加密保存，使用独立密码解锁 |
+| 云端便签、剪贴板与附件 | 未进行端到端加密；传输保护取决于连接方式，HTTPS 校验证书，HTTP 明文传输 |
+| 思源插件导入的内容 | 保存到选定思源文档，附件保存到思源工作空间 |
+
+### 忽略指定应用
+
+在设置中找到“忽略的应用”，选择 `.exe` 文件或填写进程名称，例如 `notepad.exe`。也可填写完整可执行文件路径；名称与路径匹配均不区分大小写。
+
+程序会在捕获剪贴板时检查来源应用是否被忽略。配置 WebDAV 或思源插件的连接凭据前，可先暂停剪贴板采集，避免复制账号或密码时进入历史记录。
+
+## 文档与反馈
+
+- [便签编辑器](docs/note-editor.md)：Markdown、列表、表格、块操作和附件。
+- [WebDAV 同步](docs/webdav-sync.md)：配置、数据位置、容量、冲突和环境验收。
+- [思源插件](siyuan-plugin/README.zh-CN.md)：安装、单向拉取、双向回传和限制。
+- [更新记录](CHANGELOG.md)：各版本新增功能、修复与升级说明。
+- [问题反馈](https://github.com/KiseSaki/PastePaw/issues)：请附上应用版本、Windows 版本和复现步骤；同步问题可补充脱敏后的错误信息。
+
+## 从源码运行
+
+本项目基于 Rust、Tauri 2、React、TypeScript 和 SQLite 构建，当前分支面向 Windows 开发。
+
+建议使用与发布工作流一致的环境：Node.js 24、pnpm 11.19.0 和 Rust stable，并安装 Windows C++ 构建工具及 WebView2 运行时。Tauri CLI 已包含在项目开发依赖中。
+
+在项目根目录执行：
 
 ```powershell
-winget install XueshiQiao.PastePaw
-```
+# 安装依赖
+pnpm install --frozen-lockfile
 
-To install the version maintained by this fork, use the packages from this repository's GitHub Releases.
-
-### 2. Download from GitHub Releases (Windows)
-
-Download the latest installer directly from:
-[https://github.com/KiseSaki/PastePaw/releases](https://github.com/KiseSaki/PastePaw/releases)
-
-> 🔍 **Security:** Every release is automatically scanned with [VirusTotal](https://www.virustotal.com/) (70+ antivirus engines). Scan results are linked at the bottom of each release note.
-
-
-## Keyboard Shortcuts
-
-### Global
-- **Toggle Window**: `Ctrl+Shift+V` (Default, Customizable in Settings)
-
-### In-App
-
-- `Ctrl + F` - Focus search
-- `Escape` - Close window / Clear search
-- `Enter` - Paste selected item
-- `Delete` - Delete selected item
-- `P` - Pin/Unpin selected item
-- `Arrow Up/Down` - Navigate items
-
-
-
-## Application Exceptions (Ignored Apps)
-
-PastePaw allows you to exclude specific applications from being recorded in the clipboard history. This is useful for privacy-sensitive applications like password managers or banking apps.
-
-(You need to provide the API Key for the AI provider)
-
-**Logic & Behavior:**
-- **How to manage:** Go to Settings -> Ignored Applications. You can browse for an executable (`.exe`) or strictly type its name.
-- **Privacy Protection:** When content is copied, PastePaw checks the source application against your ignore list.
-- **Robust Matching:** The system checks against **both**:
-    1.  **Executable Name** (e.g., `notepad.exe`) - Matches any instance of this app regardless of location.
-    2.  **Full File Path** (e.g., `C:\Windows\System32\notepad.exe`) - Matches only the specific installed instance.
-- **Case Insensitive:** Matching is case-insensitive to ensure reliable detection on Windows.
-
-## Tech Stack
-
-- **Backend**: Rust + Tauri 2.x
-- **Frontend**: React 18 + TypeScript
-- **Database**: SQLite
-- **Styling**: Tailwind CSS
-- **Package Manager**: pnpm
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- Rust 1.70+
-- pnpm
-
-### Dev commands
-
-```bash
-# Install dependencies
-pnpm install
-
-# Install Tauri CLI
-cargo install tauri-cli
-
-# Run development build
+# 启动开发环境
 pnpm tauri dev
 ```
 
-### Building
+构建桌面应用或思源插件：
 
-```bash
-# Build for production
+```powershell
+# 构建 Windows 应用
 pnpm tauri build
+
+# 构建思源插件
+pnpm build:siyuan
 ```
 
-## Project Structure
+## 来源、致谢与许可证
 
-```
-PastePaw/
-├── src-tauri/           # Rust backend
-│   ├── src/
-│   │   ├── main.rs      # App entry point
-│   │   ├── lib.rs       # Core logic
-│   │   ├── clipboard.rs # Clipboard monitoring
-│   │   ├── database.rs  # SQLite operations
-│   │   ├── commands.rs  # Tauri IPC commands
-│   │   └── models.rs    # Data models
-│   └── Cargo.toml
-├── frontend/            # React frontend
-│   ├── src/
-│   │   ├── components/  # UI components
-│   │   ├── hooks/       # React hooks
-│   │   ├── types/       # TypeScript types
-│   │   └── App.tsx
-│   └── package.json
-└── README.md
-```
+感谢 [XueshiQiao](https://github.com/XueshiQiao) 及原项目贡献者提供的 [PastePaw](https://github.com/XueshiQiao/PastePaw)。本分支在原项目基础上修改并独立维护，保留上游版权及许可声明；原有代码和素材的相关权利仍归各自权利人所有，新增贡献的版权归相应贡献者所有。
 
-## Development Notes
+本仓库以 GNU GPL v3 发布，完整条款见 [LICENSE](LICENSE)。本软件不提供任何担保，详细免责条款以许可证为准。
 
-### Tauri Command Argument Mapping
-
-Tauri v2 enforces a strict case mapping between JavaScript/TypeScript and Rust:
-
-- **JavaScript/Frontend:** Use `camelCase` for argument names in `invoke` calls (e.g., `filterId`).
-- **Rust/Backend:** Use `snake_case` for function arguments in `#[tauri::command]` (e.g., `filter_id`).
-
-**Example:**
-*   **Frontend:** `invoke('get_clips', { filterId: 'pinned' })`
-*   **Backend:** `pub fn get_clips(filter_id: Option<String>)`
-
-Failure to follow this convention (e.g., passing `snake_case` from the frontend) will result in arguments being passed as `null` or `None` to the backend.
-
-### Window Behavior & Multi-Monitor Support
-
-The application is designed to appear on the **active monitor** (the one containing the mouse cursor) whenever the global hotkey is pressed.
-
-- **Detection Logic:**
-    - Located in `src-tauri/src/lib.rs` (`animate_window_show`).
-    - Uses the Windows API `GetCursorPos` (via the `windows` crate) to determine the global mouse coordinates.
-    - Iterates through `window.available_monitors()` to find the monitor whose bounds contain the cursor point.
-    - Fallback: If the cursor position cannot be determined, it defaults to `window.current_monitor()`.
-
-- **Positioning:**
-    - The window is positioned at the bottom of the detected active monitor's work area (excluding taskbar).
-    - An animation slides the window up from the bottom edge.
-
-### Adjusting the Layout
-
-The application uses a centralized layout system to ensure the native window and the virtualized list remain synchronized.
-
--   **Backend Constants:** `src-tauri/src/constants.rs` (Controls the OS window size).
-*   **Frontend Constants:** `frontend/src/constants.ts` (Controls UI rendering and math).
-
-#### How to change Card Height
-The card height is dynamic and fills the available window space. To change it:
-1.  Update `WINDOW_HEIGHT` in **both** `constants.rs` and `constants.ts` to the same value.
-2.  Restart the application (required for Rust changes).
-
-#### How to change Vertical Spacing (Safe Zones)
-To add more or less space at the top/bottom of the cards (e.g., to prevent clipping during hover):
-1.  Modify `CARD_VERTICAL_PADDING` in `frontend/src/constants.ts`.
-2.  Increasing this value makes cards **shorter**; decreasing it makes them **taller**.
-
-
-## Architecture & Design Decisions
-
-### Why Frontend Clipboard for Images? (Solving "Thread does not have a clipboard open")
-
-We use a **Hybrid Clipboard Approach** to solve the notorious Windows `OSError 1418` (Thread does not have a clipboard open).
-
--   **Backend (Rust)**: Great for monitoring the clipboard and handling database checks. However, on Windows, clipboard access is bound to the thread that created the window (STA). Trying to write images from a background Tokio thread often leads to race conditions and "OpenClipboard Failed" errors. The solution would be to write images on the main thread, but this severely slows down UI responsiveness and causes lag.
--   **Frontend (WebView2)**: The browser engine has a mature, stable implementation of `navigator.clipboard.write`.
-
-**Our Solution:**
-1.  **Frontend**: Writes the **Image Blob** directly to the system clipboard.
-2.  **Backend**: Updates the internal database and triggers the paste shortcut (`Shift+Insert`).
-
-### Why use `Shift+Insert` for Pasting?
-
-We use `Shift + Insert` as the default paste trigger instead of `Ctrl + V`.
-
--   **Terminal Compatibility**: `Ctrl+V` often fails in terminal emulators (PowerShell, WSL, VS Code Terminal), sending a control character instead of pasting.
--   **Legacy Standard**: `Shift+Insert` is the universal paste standard recognized by virtually all Windows applications, including terminals and legacy software.
-
-### Sequence Diagram for Image Pasting (Windows)
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant FE as Frontend (React/App.tsx)
-    participant BE as Backend (Rust/commands.rs)
-    participant BROWSER as WebView2 Clipboard API
-    participant OS as OS / Target App
-
-    User->>FE: Double click image clip
-    activate FE
-    FE->>BE: invoke('get_clip_detail', { id })
-    BE-->>FE: Full image (base64)
-    FE->>FE: base64ToBlob(...)
-    FE->>BROWSER: navigator.clipboard.write([ClipboardItem])
-    BROWSER->>OS: Clipboard image data set
-    FE->>BE: invoke('paste_clip', { id })
-    deactivate FE
-
-    activate BE
-    BE->>BE: Update clip timestamp/LRU
-    Note over BE: On Windows, backend does not rewrite image bytes
-    BE->>OS: Hide window
-    BE->>OS: Send Shift+Insert (when auto-paste is enabled)
-    deactivate BE
-
-    OS->>User: Pasted image appears
-```
+本分支的 Windows 安装包、问题反馈和发布记录以 [KiseSaki/PastePaw](https://github.com/KiseSaki/PastePaw) 为准。上游的 macOS 版本、官网及赞助渠道由原作者维护。
