@@ -47,13 +47,31 @@ Also available for **macOS** on the [App Store](https://apps.apple.com/us/app/pa
 
 ## Screenshots
 
-![docs/paste_paw_dark.png](docs/screenshot_win_panes.png)
+These desktop scene previews share the same wallpaper, this fork's light theme and fictional demo data. Sync settings and conflicts are interface examples.
 
-### Light theme
-![docs/paste_paw_dark.png](docs/screenshot_win_light.png)
-### Dark theme
-![docs/paste_paw_dark.png](docs/screenshot_win_dark.png)
+### Notes and task management
 
+Combine rich text, checklists, tables and highlighted code, with active and completed notes in the sidebar.
+
+![Note editor with checklists, tables and syntax-highlighted code](docs/screenshots/notes.png)
+
+### Clipboard history and folders
+
+Browse text, links, JSON and colors, with pinned items, folders and numbered shortcuts.
+
+![Clipboard history with pinned items, folders and content previews](docs/screenshots/clipboard.png)
+
+### WebDAV sync settings
+
+Configure synchronization, image limits, cloud storage, sync intervals and the unlock duration for your own WebDAV service.
+
+![WebDAV sync settings and storage limits](docs/screenshots/webdav.png)
+
+### Cross-device and SiYuan conflict review
+
+Compare preserved note versions side by side, then keep either version, keep both or merge manually. This example shows a conflict from SiYuan return sync.
+
+![Side-by-side note conflict comparison with keep and merge actions](docs/screenshots/conflicts.png)
 
 ## Installation Guide
 

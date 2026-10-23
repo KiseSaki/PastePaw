@@ -56,20 +56,31 @@
 
 ## 界面预览
 
-![PastePaw 界面概览](docs/screenshot_win_panes.png)
+以下桌面场景预览统一使用相同壁纸、本分支的浅色界面与虚构演示数据；同步设置和冲突内容仅用于展示操作界面。
 
-<details>
-<summary>查看浅色与深色主题</summary>
+### 便签编辑与任务管理
 
-### 浅色主题
+在同一张便签中整理待办、表格和代码片段，通过侧边栏管理进行中与已完成的内容。
 
-![PastePaw 浅色主题](docs/screenshot_win_light.png)
+![便签编辑器：富文本、待办清单、表格与代码高亮](docs/screenshots/notes.png)
 
-### 深色主题
+### 剪贴板历史与分类
 
-![PastePaw 深色主题](docs/screenshot_win_dark.png)
+按来源浏览文本、链接、JSON 和颜色，配合置顶、分组与数字快捷键取用常用内容。
 
-</details>
+![剪贴板历史：置顶、文件夹分类与多种内容预览](docs/screenshots/clipboard.png)
+
+### WebDAV 同步设置
+
+使用自己的 WebDAV 服务，按需配置同步范围、图片大小、云端容量、同步间隔和解锁有效期。
+
+![WebDAV 同步设置：同步开关、容量策略与解锁选项](docs/screenshots/webdav.png)
+
+### 多端编辑与思源回传冲突比较
+
+并排比较保留的两版便签，选择保留一版、两版都保留或手动合并。截图展示思源回传产生冲突时的处理界面。
+
+![同步冲突比较：思源回传版本与主版本对照，以及保留和合并操作](docs/screenshots/conflicts.png)
 
 ## 下载与安装
 
