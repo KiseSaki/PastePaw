@@ -77,13 +77,14 @@ fn clip_to_detail_item(clip: &Clip, full_image_content: Option<&[u8]>) -> Clipbo
 }
 
 async fn delete_clip_image_file_by_uuid(pool: &SqlitePool, clip_uuid: &str) -> Result<(), String> {
-    let file_path: Option<String> =
-        sqlx::query_scalar::<_, Option<String>>(r#"SELECT file_path FROM clip_images WHERE clip_uuid = ?"#)
-            .bind(clip_uuid)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| e.to_string())?
-            .flatten();
+    let file_path: Option<String> = sqlx::query_scalar::<_, Option<String>>(
+        r#"SELECT file_path FROM clip_images WHERE clip_uuid = ?"#,
+    )
+    .bind(clip_uuid)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .flatten();
 
     if let Some(path) = file_path {
         if !path.is_empty() {
@@ -140,13 +141,12 @@ pub async fn enforce_clipboard_limits(
     max_items: i64,
     auto_delete_days: i64,
 ) -> Result<(), String> {
-    // 1. Time-based expiration (auto_delete_days > 0)
-    // Non-folder clips older than auto_delete_days are deleted
+    // 1. 按保留天数清理，只删除未分组且未置顶的过期记录。
     if auto_delete_days > 0 {
         let _ = sqlx::query(
             r#"
             DELETE FROM clips
-            WHERE folder_id IS NULL AND is_deleted = 0
+            WHERE folder_id IS NULL AND is_deleted = 0 AND is_pinned = 0
               AND julianday(created_at) < julianday('now', '-' || ? || ' days')
             "#,
         )
@@ -155,16 +155,15 @@ pub async fn enforce_clipboard_limits(
         .await;
     }
 
-    // 2. Capacity limit (max_items > 0)
-    // Keep only the latest `max_items` unorganized/root clips
+    // 2. 仅保留最新的 max_items 条普通记录，置顶和分组记录不占额度。
     if max_items > 0 {
         let _ = sqlx::query(
             r#"
             DELETE FROM clips
-            WHERE folder_id IS NULL AND is_deleted = 0
+            WHERE folder_id IS NULL AND is_deleted = 0 AND is_pinned = 0
               AND id NOT IN (
                   SELECT id FROM clips
-                  WHERE folder_id IS NULL AND is_deleted = 0
+                  WHERE folder_id IS NULL AND is_deleted = 0 AND is_pinned = 0
                   ORDER BY julianday(created_at) DESC, id DESC
                   LIMIT ?
               )
@@ -175,7 +174,7 @@ pub async fn enforce_clipboard_limits(
         .await;
     }
 
-    // 3. Clean up orphaned image files
+    // 3. 清理已无关联记录的图片文件。
     let _ = cleanup_orphan_clip_image_files(pool).await;
 
     Ok(())
@@ -275,7 +274,10 @@ async fn load_full_image_content(pool: &SqlitePool, clip: &mut Clip) -> Result<V
                 return Ok(bytes);
             }
             // If file missing, try fallbacks below
-            log::warn!("Image file missing for clip {}, checking DB backups...", clip.uuid);
+            log::warn!(
+                "Image file missing for clip {}, checking DB backups...",
+                clip.uuid
+            );
         }
     }
 
@@ -1588,9 +1590,12 @@ pub async fn set_notepad_always_on_top(
     if let Some(win) = app.get_webview_window("notepad") {
         let _ = win.set_always_on_top(enabled);
     }
-    db.set_setting("notepad_always_on_top", if enabled { "true" } else { "false" })
-        .await
-        .map_err(|e| e.to_string())?;
+    db.set_setting(
+        "notepad_always_on_top",
+        if enabled { "true" } else { "false" },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1674,5 +1679,102 @@ mod clipboard_history_tests {
             .await
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn pinned_clips_survive_capacity_cleanup_without_consuming_quota() {
+        let db = fixture().await;
+        insert(&db.pool, "最旧置顶", "2000-01-01 00:00:00").await;
+        for i in 0..1001 {
+            insert(&db.pool, &format!("普通{i:04}"), "2026-11-12 00:00:00").await;
+        }
+        insert(&db.pool, "最新置顶", "2026-11-13 00:00:00").await;
+        sqlx::query("UPDATE clips SET is_pinned=1 WHERE uuid IN ('最旧置顶','最新置顶')")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+        enforce_clipboard_limits(&db.pool, 1000, 0).await.unwrap();
+        let ids: Vec<String> = sqlx::query_scalar("SELECT uuid FROM clips ORDER BY uuid")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+        let mut expected: Vec<String> = (1..1001).map(|i| format!("普通{i:04}")).collect();
+        expected.extend(["最旧置顶".to_string(), "最新置顶".to_string()]);
+        expected.sort();
+        assert_eq!(ids, expected);
+
+        // 取消置顶后恢复普通记录的额度和淘汰规则。
+        sqlx::query("UPDATE clips SET is_pinned=0 WHERE uuid='最旧置顶'")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        enforce_clipboard_limits(&db.pool, 1000, 0).await.unwrap();
+        let ids: Vec<String> = sqlx::query_scalar("SELECT uuid FROM clips ORDER BY uuid")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+        expected.retain(|id| id != "最旧置顶");
+        assert_eq!(ids, expected);
+    }
+
+    #[tokio::test]
+    async fn pinned_clips_and_images_survive_expiry_until_unpinned() {
+        let db = fixture().await;
+        let past = (chrono::Utc::now() - chrono::Duration::days(31)).to_rfc3339();
+        for id in ["过期普通", "过期置顶", "过期分组", "过期回收站"] {
+            insert(&db.pool, id, &past).await;
+        }
+        insert(&db.pool, "最近普通", &chrono::Utc::now().to_rfc3339()).await;
+        sqlx::query("UPDATE clips SET is_pinned=1,clip_type='image' WHERE uuid='过期置顶'")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO clip_images(clip_uuid,full_content) VALUES('过期置顶',x'010203')")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO folders(id,name) VALUES(99,'分组')")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE clips SET folder_id=99 WHERE uuid='过期分组'")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE clips SET is_deleted=1 WHERE uuid='过期回收站'")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+        enforce_clipboard_limits(&db.pool, 0, 30).await.unwrap();
+        let ids: Vec<String> = sqlx::query_scalar("SELECT uuid FROM clips ORDER BY uuid")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(ids, ["最近普通", "过期分组", "过期回收站", "过期置顶"]);
+        let image: Vec<u8> =
+            sqlx::query_scalar("SELECT full_content FROM clip_images WHERE clip_uuid='过期置顶'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(image, [1, 2, 3]);
+
+        // 取消置顶后，已过期的记录和关联图片会正常清理。
+        sqlx::query("UPDATE clips SET is_pinned=0 WHERE uuid='过期置顶'")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        enforce_clipboard_limits(&db.pool, 0, 30).await.unwrap();
+        let ids: Vec<String> = sqlx::query_scalar("SELECT uuid FROM clips ORDER BY uuid")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(ids, ["最近普通", "过期分组", "过期回收站"]);
+        let image_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM clip_images")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(image_count, 0);
     }
 }

@@ -2,6 +2,22 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.6.2
+
+### Fixed
+- **Pinned Clipboard Retention**: Pinned items no longer count toward the history capacity limit and are excluded from automatic expiration. Unpinning restores normal retention rules; grouped items remain protected.
+
+### Improved
+- **Retention Settings**: Clarify in all supported languages that pinned and folder items are exempt from capacity limits and automatic expiration.
+- **Documentation**: Refresh the Chinese repository homepage and branch usage guide, retain the English entry point, and update feature previews with desktop wallpaper screenshots.
+
+### 修复
+- **置顶剪切板保留**：置顶记录不再占用历史数量额度，也不参与过期自动清理；取消置顶后恢复普通保留规则，分组内记录继续保留。
+
+### 改进
+- **保留设置说明**：同步更新所有支持语言，明确置顶和分组记录不占数量额度、不参与过期自动清理。
+- **项目文档**：更新中文仓库首页及本分支使用说明，保留英文入口，使用桌面壁纸截图更新功能预览。
+
 ## v1.6.1
 
 ### Fixed
