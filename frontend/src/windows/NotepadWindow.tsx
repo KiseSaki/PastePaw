@@ -1410,7 +1410,10 @@ export function NotepadWindow() {
           >
             {t('notepad.conflicts.title')} ({conflicts.length})
           </button>
-          {editor && <EditorTools editor={editor} noteId={selectedNoteId} />}
+          {/* 保留工具栏状态，随窗口悬停或聚焦显示，隐藏时不占用正文空间。 */}
+          <div className={clsx('shrink-0', !showChrome && 'hidden')}>
+            {editor && <EditorTools editor={editor} noteId={selectedNoteId} />}
+          </div>
 
           {/* Tiptap Rich Markdown Editor */}
           <div className="relative flex-1 overflow-y-auto p-3 text-xs leading-relaxed">

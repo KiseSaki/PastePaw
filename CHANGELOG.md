@@ -2,6 +2,14 @@
 
 All notable changes to PastePaw will be documented in this file.
 
+## v1.6.3
+
+### Fixed
+- **Note Editor Toolbar Visibility**: Formatting, insertion, find/replace and block controls now follow the note window's hover/focus visibility. When the window is idle, the controls hide without taking up note space; returning restores their state.
+
+### 修复
+- **便签编辑工具栏显示**：格式、插入、查找替换及块操作工具栏随便签窗口的鼠标悬停或聚焦状态显示；闲置时隐藏且不占用正文空间，再次显示时保留工具栏状态。
+
 ## v1.6.2
 
 ### Fixed
